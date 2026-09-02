@@ -1,0 +1,14 @@
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\bin\Release\net8.0\RelaisComputerSimulator.exe
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\bin\Release\net8.0\RelaisComputerSimulator.deps.json
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\bin\Release\net8.0\RelaisComputerSimulator.runtimeconfig.json
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\bin\Release\net8.0\RelaisComputerSimulator.dll
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\bin\Release\net8.0\RelaisComputerSimulator.pdb
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\obj\Release\net8.0\RelaisComputerSimulator.GeneratedMSBuildEditorConfig.editorconfig
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\obj\Release\net8.0\RelaisComputerSimulator.AssemblyInfoInputs.cache
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\obj\Release\net8.0\RelaisComputerSimulator.AssemblyInfo.cs
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\obj\Release\net8.0\RelaisComputerSimulator.csproj.CoreCompileInputs.cache
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\obj\Release\net8.0\RelaisComputerSimulator.dll
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\obj\Release\net8.0\refint\RelaisComputerSimulator.dll
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\obj\Release\net8.0\RelaisComputerSimulator.pdb
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\obj\Release\net8.0\RelaisComputerSimulator.genruntimeconfig.cache
+Z:\Relaiscomputer\C_SharpSoftware\RelaisComputerSimulator\obj\Release\net8.0\ref\RelaisComputerSimulator.dll

@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "RelaisComputerSimulator": {
+      "commandName": "Project",
+      "commandLineArgs": "test.txt",
+      "workingDirectory": "Z:\\Relaiscomputer\\C_SharpSoftware\\RelaisComputerSimulator\\bin\\Debug\\net8.0"
+    }
+  }
+}
