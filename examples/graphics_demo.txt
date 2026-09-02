@@ -1,0 +1,148 @@
+// ============================================================
+// ⚡ Generiert von Clack-BASIC Cross-Compiler (Arduino Loader Format)
+// ============================================================
+CLR
+
+0 0x4000 // Initialer Sprung zum Hauptprogramm
+1 0x000A // Operand #0x0000 (0)
+10 0x5000 // CALL __cls (Display loeschen)
+11 0x0068 // Operand #0x0000 (0)
+12 0x1400 // Konstante 0
+14 0x2800 // FOR I Startwert
+15 0x01F4 // Operand #0x01F4 (500)
+16 0x1400 // Konstante 15
+17 0x000F // Operand #0x000F (15)
+18 0x2800 // FOR I Endwert
+19 0x02BC // Operand #0x02BC (700)
+20 0x1800 // Pruefe FOR Limit
+21 0x01F4 // Operand #0x01F4 (500)
+22 0x3540 // ~Var
+24 0x3440 // ~Var + 1
+25 0x0001 // Operand #0x0001 (1)
+26 0x2800 // Patch Limit Addition
+27 0x001F // Operand #0x001F (31)
+28 0x1800 // Lade Endwert
+29 0x02BC // Operand #0x02BC (700)
+30 0x3440 // Endwert - Var
+32 0x4010 // FOR Beenden wenn Var > End
+33 0x0038 // Operand #0x0000 (0)
+34 0x1800 // Variable I
+35 0x01F4 // Operand #0x01F4 (500)
+36 0x2800 // PSET X
+37 0x01F5 // Operand #0x01F5 (501)
+38 0x1800 // Variable I
+39 0x01F4 // Operand #0x01F4 (500)
+40 0x2800 // PSET Y
+41 0x01F6 // Operand #0x01F6 (502)
+42 0x1400 // Konstante 65535
+43 0xFFFF // Operand #0xFFFF (65535)
+44 0x2800 // PSET Color
+45 0x01F7 // Operand #0x01F7 (503)
+46 0x5000 // CALL __pset
+47 0x0081 // Operand #0x0000 (0)
+48 0x1800 // Lade Zaehler
+49 0x01F4 // Operand #0x01F4 (500)
+50 0x3440 // Zaehler + 1
+51 0x0001 // Operand #0x0001 (1)
+52 0x2800 // Speichere Zaehler
+53 0x01F4 // Operand #0x01F4 (500)
+54 0x4000 // FOR Loop Sprung
+55 0x0014 // Operand #0x0000 (0)
+56 0x1400 // Konstante 0
+58 0x2800 // FOR X Startwert
+59 0x01F8 // Operand #0x01F8 (504)
+60 0x1400 // Konstante 31
+61 0x001F // Operand #0x001F (31)
+62 0x2800 // FOR X Endwert
+63 0x02BD // Operand #0x02BD (701)
+64 0x1800 // Pruefe FOR Limit
+65 0x01F8 // Operand #0x01F8 (504)
+66 0x3540 // ~Var
+68 0x3440 // ~Var + 1
+69 0x0001 // Operand #0x0001 (1)
+70 0x2800 // Patch Limit Addition
+71 0x004B // Operand #0x004B (75)
+72 0x1800 // Lade Endwert
+73 0x02BD // Operand #0x02BD (701)
+74 0x3440 // Endwert - Var
+76 0x4010 // FOR Beenden wenn Var > End
+77 0x0064 // Operand #0x0000 (0)
+78 0x1800 // Variable X
+79 0x01F8 // Operand #0x01F8 (504)
+80 0x2800 // PSET X
+81 0x01F5 // Operand #0x01F5 (501)
+82 0x1400 // Konstante 8
+83 0x0008 // Operand #0x0008 (8)
+84 0x2800 // PSET Y
+85 0x01F6 // Operand #0x01F6 (502)
+86 0x1400 // Konstante 43690
+87 0xAAAA // Operand #0xAAAA (43690)
+88 0x2800 // PSET Color
+89 0x01F7 // Operand #0x01F7 (503)
+90 0x5000 // CALL __pset
+91 0x0081 // Operand #0x0000 (0)
+92 0x1800 // Lade Zaehler
+93 0x01F8 // Operand #0x01F8 (504)
+94 0x3440 // Zaehler + 1
+95 0x0001 // Operand #0x0001 (1)
+96 0x2800 // Speichere Zaehler
+97 0x01F8 // Operand #0x01F8 (504)
+98 0x4000 // FOR Loop Sprung
+99 0x0040 // Operand #0x0000 (0)
+100 0x4000 // END / HALT
+101 0x0064 // Operand #0x0064 (100)
+102 0x4000 // Ende des Programms (Halt-Schleife)
+103 0x0066 // Operand #0x0066 (102)
+104 0x1400 // __cls: Startadresse 960
+105 0x03C0 // Operand #0x03C0 (960)
+106 0x2800 // Speichere Display-Zeiger
+107 0x01F9 // Operand #0x01F9 (505)
+108 0x1800 // Lade Zeiger
+109 0x01F9 // Operand #0x01F9 (505)
+110 0x2800 // Patch Zieladresse
+111 0x0073 // Operand #0x0073 (115)
+112 0x1400 // Pixeldaten = 0
+114 0x2800 // Schreibe in Display
+116 0x1800 // Zeiger inkrementieren
+117 0x01F9 // Operand #0x01F9 (505)
+118 0x3440 // ptr++
+119 0x0001 // Operand #0x0001 (1)
+120 0x2800 // Speichere ptr
+121 0x01F9 // Operand #0x01F9 (505)
+122 0x3440 // ptr - 1024
+123 0xFC00 // Operand #0xFC00 (64512)
+124 0x4018 // __cls: Fertig bei 1024
+125 0x0080 // Operand #0x0000 (0)
+126 0x4000 // Loop __cls
+127 0x006C // Operand #0x006C (108)
+128 0x6000 // RETURN __cls
+129 0x1800 // __pset: Lade Y
+130 0x01F6 // Operand #0x01F6 (502)
+131 0x35C0 // Y * 2
+133 0x3440 // Base + Y*2
+134 0x03C0 // Operand #0x03C0 (960)
+135 0x2800 // Speichere wordAddr
+136 0x01FA // Operand #0x01FA (506)
+137 0x1800 // Lade X
+138 0x01F5 // Operand #0x01F5 (501)
+139 0x3580 // X >> 1
+141 0x3580 // X >> 2
+143 0x3580 // X >> 3
+145 0x3580 // X >> 4 (X / 16)
+147 0x2800 // Patch X Offset
+148 0x0098 // Operand #0x0098 (152)
+149 0x1800 // Lade wordAddr
+150 0x01FA // Operand #0x01FA (506)
+151 0x3440 // wordAddr + (X / 16)
+153 0x2800 // Final wordAddr
+154 0x01FA // Operand #0x01FA (506)
+155 0x1800 // Lade wordAddr
+156 0x01FA // Operand #0x01FA (506)
+157 0x2800 // Patch Zieladresse
+158 0x00A2 // Operand #0x00A2 (162)
+159 0x1800 // Lade Color
+160 0x01F7 // Operand #0x01F7 (503)
+161 0x2800 // Schreibe Pixelwort in Display
+163 0x6000 // RETURN __pset
+
+RUN

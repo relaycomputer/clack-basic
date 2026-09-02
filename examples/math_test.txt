@@ -1,0 +1,195 @@
+// ============================================================
+// ⚡ Generiert von Clack-BASIC Cross-Compiler (Arduino Loader Format)
+// ============================================================
+CLR
+
+0 0x4000 // Initialer Sprung zum Hauptprogramm
+1 0x000A // Operand #0x0000 (0)
+10 0x1400 // Konstante 25
+11 0x0019 // Operand #0x0019 (25)
+12 0x2800 // LET A = Accu
+13 0x01F4 // Operand #0x01F4 (500)
+14 0x1400 // Konstante 14
+15 0x000E // Operand #0x000E (14)
+16 0x2800 // LET B = Accu
+17 0x01F5 // Operand #0x01F5 (501)
+18 0x1800 // Variable B
+19 0x01F5 // Operand #0x01F5 (501)
+20 0x2800 // Rechter Operand
+21 0x02BC // Operand #0x02BC (700)
+22 0x1800 // Variable A
+23 0x01F4 // Operand #0x01F4 (500)
+24 0x2800 // Temp Accu sichern
+25 0x02BD // Operand #0x02BD (701)
+26 0x1800 // Lade B
+27 0x02BC // Operand #0x02BC (700)
+28 0x2800 // Patch ADD Operand
+29 0x0021 // Operand #0x0021 (33)
+30 0x1800 // Lade A zurueck
+31 0x02BD // Operand #0x02BD (701)
+32 0x3440 // A + B
+34 0x2800 // LET C = Accu
+35 0x01F6 // Operand #0x01F6 (502)
+36 0x1800 // Variable B
+37 0x01F5 // Operand #0x01F5 (501)
+38 0x2800 // Rechter Operand
+39 0x02BE // Operand #0x02BE (702)
+40 0x1800 // Variable A
+41 0x01F4 // Operand #0x01F4 (500)
+42 0x2800 // Temp A sichern
+43 0x02BF // Operand #0x02BF (703)
+44 0x1800 // Lade B
+45 0x02BE // Operand #0x02BE (702)
+46 0x3540 // ~B
+48 0x3440 // ~B + 1 (-B)
+49 0x0001 // Operand #0x0001 (1)
+50 0x2800 // Patch ADD Operand mit -B
+51 0x0037 // Operand #0x0037 (55)
+52 0x1800 // Lade A zurueck
+53 0x02BF // Operand #0x02BF (703)
+54 0x3440 // A + (-B)
+56 0x2800 // LET D = Accu
+57 0x01F7 // Operand #0x01F7 (503)
+58 0x1400 // Konstante 12
+59 0x000C // Operand #0x000C (12)
+60 0x2800 // Multiplikand __r0
+61 0x01F9 // Operand #0x01F9 (505)
+62 0x1400 // Konstante 7
+63 0x0007 // Operand #0x0007 (7)
+64 0x2800 // Multiplikator __r1
+65 0x01FA // Operand #0x01FA (506)
+66 0x5000 // CALL __mul
+67 0x008A // Operand #0x0000 (0)
+68 0x2800 // LET P = Accu
+69 0x01F8 // Operand #0x01F8 (504)
+70 0x1400 // Konstante 100
+71 0x0064 // Operand #0x0064 (100)
+72 0x2800 // Dividend __r0
+73 0x01F9 // Operand #0x01F9 (505)
+74 0x1400 // Konstante 8
+75 0x0008 // Operand #0x0008 (8)
+76 0x2800 // Divisor __r1
+77 0x01FA // Operand #0x01FA (506)
+78 0x5000 // CALL __div
+79 0x00AF // Operand #0x0000 (0)
+80 0x2800 // LET Q = Accu
+81 0x01FB // Operand #0x01FB (507)
+82 0x1400 // Konstante 100
+83 0x0064 // Operand #0x0064 (100)
+84 0x2800 // Dividend __r0
+85 0x01F9 // Operand #0x01F9 (505)
+86 0x1400 // Konstante 8
+87 0x0008 // Operand #0x0008 (8)
+88 0x2800 // Divisor __r1
+89 0x01FA // Operand #0x01FA (506)
+90 0x5000 // CALL __div
+91 0x00AF // Operand #0x0000 (0)
+92 0x1800 // Lade Divisionsrest
+93 0x01FD // Operand #0x01FD (509)
+94 0x2800 // LET R = Accu
+95 0x01FC // Operand #0x01FC (508)
+96 0x1400 // Konstante 80
+97 0x0050 // Operand #0x0050 (80)
+98 0x2800 // Rechter Operand
+99 0x02C0 // Operand #0x02C0 (704)
+100 0x1800 // Variable P
+101 0x01F8 // Operand #0x01F8 (504)
+102 0x2800 // Sichere A
+103 0x02C1 // Operand #0x02C1 (705)
+104 0x3540 // ~A
+106 0x3440 // -A
+107 0x0001 // Operand #0x0001 (1)
+108 0x2800 // Patch -A
+109 0x0071 // Operand #0x0071 (113)
+110 0x1800 // Lade B
+111 0x02C0 // Operand #0x02C0 (704)
+112 0x3440 // B - A
+114 0x4010 // Branch Bedingung erfuellt
+115 0x0078 // Operand #0x0000 (0)
+116 0x1400 // Ergebnis = 0 (False)
+118 0x4000 // Sprung zu Comp-Ende
+119 0x007A // Operand #0x0000 (0)
+120 0x1400 // Ergebnis = 1 (True)
+121 0x0001 // Operand #0x0001 (1)
+122 0x4018 // IF False -> Skip
+123 0x0082 // Operand #0x0000 (0)
+124 0x1400 // Konstante 1
+125 0x0001 // Operand #0x0001 (1)
+126 0x2800 // LET STATUS = Accu
+127 0x01FE // Operand #0x01FE (510)
+128 0x4000 // GOTO EndIf
+129 0x0086 // Operand #0x0000 (0)
+130 0x1400 // Konstante 0
+132 0x2800 // LET STATUS = Accu
+133 0x01FE // Operand #0x01FE (510)
+134 0x4000 // END / HALT
+135 0x0086 // Operand #0x0086 (134)
+136 0x4000 // Ende des Programms (Halt-Schleife)
+137 0x0088 // Operand #0x0088 (136)
+138 0x1400 // __mul: Initialisiere Produkt = 0
+140 0x2800 // prod = 0
+141 0x01FF // Operand #0x01FF (511)
+142 0x1800 // __mul: Lade Faktor 2
+143 0x01FA // Operand #0x01FA (506)
+144 0x4018 // __mul: Wenn Faktor 2 == 0 -> Fertig
+145 0x00AC // Operand #0x0000 (0)
+146 0x4020 // __mul: Wenn Even -> Skip Addition
+147 0x009E // Operand #0x0000 (0)
+148 0x1800 // __mul: Lade r0
+149 0x01F9 // Operand #0x01F9 (505)
+150 0x2800 // Patch ADD
+151 0x009B // Operand #0x009B (155)
+152 0x1800 // Lade prod
+153 0x01FF // Operand #0x01FF (511)
+154 0x3440 // prod + r0
+156 0x2800 // Aktualisiere prod
+157 0x01FF // Operand #0x01FF (511)
+158 0x1800 // Shift r0 links
+159 0x01F9 // Operand #0x01F9 (505)
+160 0x35C0 // r0 << 1
+162 0x2800 // Speichere r0
+163 0x01F9 // Operand #0x01F9 (505)
+164 0x1800 // Shift r1 rechts
+165 0x01FA // Operand #0x01FA (506)
+166 0x3580 // r1 >> 1
+168 0x2800 // Speichere r1
+169 0x01FA // Operand #0x01FA (506)
+170 0x4000 // Loop __mul
+171 0x008E // Operand #0x008E (142)
+172 0x1800 // __mul: Rueckgabe Produkt
+173 0x01FF // Operand #0x01FF (511)
+174 0x6000 // RETURN __mul
+175 0x1400 // __div: Initialisiere Quotient = 0
+177 0x2800 // quot = 0
+178 0x0200 // Operand #0x0200 (512)
+179 0x1800 // Lade Dividend in Remainder
+180 0x01F9 // Operand #0x01F9 (505)
+181 0x2800 // rem = dividend
+182 0x01FD // Operand #0x01FD (509)
+183 0x1800 // Lade Divisor
+184 0x01FA // Operand #0x01FA (506)
+185 0x3540 // ~Divisor
+187 0x3440 // -Divisor
+188 0x0001 // Operand #0x0001 (1)
+189 0x2800 // Patch Divisor
+190 0x00C2 // Operand #0x00C2 (194)
+191 0x1800 // Lade rem
+192 0x01FD // Operand #0x01FD (509)
+193 0x3440 // rem - Divisor
+195 0x4010 // __div: Fertig wenn rem < Divisor
+196 0x00CF // Operand #0x0000 (0)
+197 0x2800 // Aktualisiere rem
+198 0x01FD // Operand #0x01FD (509)
+199 0x1800 // Lade quot
+200 0x0200 // Operand #0x0200 (512)
+201 0x3440 // quot++
+202 0x0001 // Operand #0x0001 (1)
+203 0x2800 // Speichere quot
+204 0x0200 // Operand #0x0200 (512)
+205 0x4000 // Loop __div
+206 0x00B7 // Operand #0x00B7 (183)
+207 0x1800 // __div: Rueckgabe Quotient
+208 0x0200 // Operand #0x0200 (512)
+209 0x6000 // RETURN __div
+
+RUN

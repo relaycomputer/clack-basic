@@ -1,0 +1,831 @@
+package codegen
+
+/*
+ ==============================================================================
+ ⚡ CODE-GENERATOR FÜR CLACK-BASIC
+ ==============================================================================
+ Übersetzt den abstrakten Syntaxbaum (AST) in 16-Bit Relais-Maschinencode.
+ Behandelt:
+  - Ein-Register-Architektur (Accu)
+  - Dynamisches Operand-Patching für Variablenarithmetik
+  - 2er-Komplement-Subtraktion (A + ~B + 1)
+  - Automatische Einbindung von Runtime-Routinen (Multiplikation, Division, Display)
+  - 2-Pass Label- und Sprungadressen-Auflösung
+ ==============================================================================
+*/
+
+import (
+	"fmt"
+	"strings"
+
+	"clack-basic/pkg/ast"
+)
+
+const (
+	MaxMemorySize = 1024
+	VarBaseAddr   = 500 // Variablen werden ab Adresse 500 abgelegt
+	TempBaseAddr  = 700 // Temporäre Berechnungszellen ab Adresse 700
+	DisplayBase   = 960 // Display-Bereich: 960..1023
+)
+
+// CodeGenerator übersetzt AST in Maschinencode.
+type CodeGenerator struct {
+	memory       [MaxMemorySize]uint16
+	pc           uint16
+	symbols      map[string]uint16 // Variablenname -> RAM-Adresse
+	nextVarAddr  uint16
+	nextTempAddr uint16
+
+	labels       map[string]uint16 // Label-Name -> PC-Adresse
+	fixups       []labelFixup      // Unaufgelöste Sprungziele (Forward Jumps)
+
+	// Runtime-Bedarf
+	needMul  bool
+	needDiv  bool
+	needCls  bool
+	needPset bool
+
+	// DATA-Tabelle
+	dataTable []int
+	dataPtr   uint16
+
+	forStack []forLoopContext
+	comments map[uint16]string
+}
+
+type labelFixup struct {
+	patchPC uint16
+	label   string
+	line    int
+}
+
+type forLoopContext struct {
+	varName   string
+	stepVal   int
+	loopStart uint16
+	endAddr   uint16
+}
+
+// NewCodeGenerator initialisiert den Code-Generator.
+func NewCodeGenerator() *CodeGenerator {
+	return &CodeGenerator{
+		symbols:      make(map[string]uint16),
+		nextVarAddr:  VarBaseAddr,
+		nextTempAddr: TempBaseAddr,
+		labels:       make(map[string]uint16),
+		fixups:       []labelFixup{},
+		dataTable:    []int{},
+		forStack:     []forLoopContext{},
+		comments:     make(map[uint16]string),
+	}
+}
+
+// Generate übersetzt das Programm und liefert das fertige 1024-Wort-Speicherabbild.
+func (g *CodeGenerator) Generate(prog *ast.Program) ([MaxMemorySize]uint16, map[uint16]string, error) {
+	// Start-Sprung über Boot-Bereich (Sprung zu eigentlichem Programmstart)
+	g.emit(OpBA, 0, "Initialer Sprung zum Hauptprogramm")
+	g.fixups = append(g.fixups, labelFixup{patchPC: 1, label: "__main_start"})
+
+	// Hauptprogramm-Einstieg
+	g.pc = 10 // Start ab PC = 10
+	g.labels["__main_start"] = g.pc
+
+	// Initialisiere __data_ptr nur wenn DATA existiert
+	if len(g.dataTable) > 0 {
+		ptrAddr := g.getOrCreateVar("__data_ptr")
+		g.emit(OpLDA, 0, "Init __data_ptr")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__data_table_start"})
+		g.emit(OpSTAM, ptrAddr, "Speichere __data_ptr")
+	}
+
+	// Statements nacheinander übersetzen
+	for _, stmt := range prog.Statements {
+		if err := g.compileStmt(stmt); err != nil {
+			return g.memory, g.comments, err
+		}
+	}
+
+	// Programmabschluss (HALT / Endlosschleife)
+	haltPC := g.pc
+	g.emit(OpBA, haltPC, "Ende des Programms (Halt-Schleife)")
+
+	// Eingebettete Subroutinen anhängen
+	g.emitRuntimeRoutines()
+
+	// DATA-Tabelle im oberen Speicher ablegen
+	g.emitDataTable()
+
+	// 2. Pass: Alle offenen Sprungmarken (Fixups) auflösen
+	for _, fix := range g.fixups {
+		targetPC, exists := g.labels[fix.label]
+		if !exists {
+			return g.memory, g.comments, fmt.Errorf("Undefiniertes Sprungziel / Label '%s'", fix.label)
+		}
+		g.memory[fix.patchPC] = targetPC
+	}
+
+	return g.memory, g.comments, nil
+}
+
+// ============================================================================
+// STATEMENTS KOMPILIEREN
+// ============================================================================
+
+func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
+	switch s := stmt.(type) {
+	case *ast.LabelStmt:
+		g.labels[s.Name] = g.pc
+		return nil
+
+	case *ast.LetStmt:
+		varAddr := g.getOrCreateVar(s.VarName)
+		// Wert des Ausdrucks in Accu berechnen
+		if err := g.compileExpr(s.Value); err != nil {
+			return err
+		}
+		// Accu in Variable speichern
+		g.emit(OpSTAM, varAddr, fmt.Sprintf("LET %s = Accu", s.VarName))
+		return nil
+
+	case *ast.GotoStmt:
+		g.emit(OpBA, 0, fmt.Sprintf("GOTO %s", s.Target))
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: s.Target, line: s.Line})
+		return nil
+
+	case *ast.GosubStmt:
+		g.emit(OpCALL, 0, fmt.Sprintf("GOSUB %s", s.Target))
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: s.Target, line: s.Line})
+		return nil
+
+	case *ast.ReturnStmt:
+		g.emitSingle(OpRET, "RETURN aus Unterprogramm")
+		return nil
+
+	case *ast.IfStmt:
+		return g.compileIf(s)
+
+	case *ast.ForStmt:
+		return g.compileFor(s)
+
+	case *ast.DataStmt:
+		g.dataTable = append(g.dataTable, s.Values...)
+		return nil
+
+	case *ast.ReadStmt:
+		return g.compileRead(s)
+
+	case *ast.RestoreStmt:
+		ptrAddr := g.getOrCreateVar("__data_ptr")
+		g.emit(OpLDA, 0, "RESTORE DATA Pointer")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__data_table_start"})
+		g.emit(OpSTAM, ptrAddr, "Speichere __data_ptr")
+		return nil
+
+	case *ast.PokeStmt:
+		// 1. Berechne Wert
+		if err := g.compileExpr(s.Value); err != nil {
+			return err
+		}
+		valTemp := g.allocTemp()
+		g.emit(OpSTAM, valTemp, "POKE Temp Wert")
+
+		// 2. Berechne Adresse
+		if err := g.compileExpr(s.Address); err != nil {
+			return err
+		}
+		// Dynamischer Store über Opcode-Patching
+		patchStore := g.pc + 5
+		g.emit(OpSTAM, patchStore, "Patch POKE Zieladresse")
+		g.emit(OpLDAM, valTemp, "Lade POKE Wert")
+		g.emit(OpSTAM, 0, "POKE [dynamisch]")
+		return nil
+
+	case *ast.ClsStmt:
+		g.needCls = true
+		g.emit(OpCALL, 0, "CALL __cls (Display loeschen)")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_cls"})
+		return nil
+
+	case *ast.PsetStmt:
+		g.needPset = true
+		// X, Y, Color in Parameter-Register ablegen
+		if err := g.compileExpr(s.X); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, g.getOrCreateVar("__pset_x"), "PSET X")
+
+		if err := g.compileExpr(s.Y); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, g.getOrCreateVar("__pset_y"), "PSET Y")
+
+		if err := g.compileExpr(s.Color); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, g.getOrCreateVar("__pset_c"), "PSET Color")
+
+		g.emit(OpCALL, 0, "CALL __pset")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_pset"})
+		return nil
+
+	case *ast.EndStmt:
+		haltPC := g.pc
+		g.emit(OpBA, haltPC, "END / HALT")
+		return nil
+
+	default:
+		return fmt.Errorf("Nicht unterstütztes Statement: %T", stmt)
+	}
+}
+
+func (g *CodeGenerator) compileIf(s *ast.IfStmt) error {
+	// Bedingung in Accu auswerten: 0 = false, != 0 = true
+	if err := g.compileExpr(s.Condition); err != nil {
+		return err
+	}
+
+	// Wenn Accu == 0 (false), springe zu Else / EndIf
+	elseLabel := fmt.Sprintf("__else_%d", g.pc)
+	endIfLabel := fmt.Sprintf("__endif_%d", g.pc)
+
+	targetFalse := elseLabel
+	if len(s.ElseBranch) == 0 {
+		targetFalse = endIfLabel
+	}
+
+	g.emit(OpBZ, 0, "IF False -> Skip")
+	g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: targetFalse})
+
+	// THEN Zweig
+	for _, tStmt := range s.ThenBranch {
+		if err := g.compileStmt(tStmt); err != nil {
+			return err
+		}
+	}
+
+	// Falls ELSE existiert
+	if len(s.ElseBranch) > 0 {
+		g.emit(OpBA, 0, "GOTO EndIf")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: endIfLabel})
+
+		g.labels[elseLabel] = g.pc
+		for _, eStmt := range s.ElseBranch {
+			if err := g.compileStmt(eStmt); err != nil {
+				return err
+			}
+		}
+	}
+
+	g.labels[endIfLabel] = g.pc
+	return nil
+}
+
+func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
+	varAddr := g.getOrCreateVar(s.VarName)
+
+	// 1. Initialisiere Startwert: Var = Start
+	if err := g.compileExpr(s.Start); err != nil {
+		return err
+	}
+	g.emit(OpSTAM, varAddr, fmt.Sprintf("FOR %s Startwert", s.VarName))
+
+	// 2. Berechne und speichere Endwert
+	if err := g.compileExpr(s.End); err != nil {
+		return err
+	}
+	endAddr := g.allocTemp()
+	g.emit(OpSTAM, endAddr, fmt.Sprintf("FOR %s Endwert", s.VarName))
+
+	loopStartPC := g.pc
+	loopStartLabel := fmt.Sprintf("__for_start_%s_%d", s.VarName, loopStartPC)
+	loopEndLabel := fmt.Sprintf("__for_end_%s_%d", s.VarName, loopStartPC)
+	g.labels[loopStartLabel] = loopStartPC
+
+	// 3. Schleifenbedingung: Var <= End
+	// Berechne End - Var >= 0
+	// 2er Komplement von Var: ~Var + 1
+	g.emit(OpLDAM, varAddr, "Pruefe FOR Limit")
+	g.emit(OpNOT, 0, "~Var")
+	g.emit(OpADD, 1, "~Var + 1")
+	patchAddr := g.pc + 5
+	g.emit(OpSTAM, patchAddr, "Patch Limit Addition")
+	g.emit(OpLDAM, endAddr, "Lade Endwert")
+	g.emit(OpADD, 0, "Endwert - Var")
+	// Wenn Negativ (Bit 15 gesetzt) -> Schleife beenden
+	g.emit(OpBN, 0, "FOR Beenden wenn Var > End")
+	g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopEndLabel})
+
+	// 4. Schleifenrumpf (Body)
+	for _, bStmt := range s.Body {
+		if err := g.compileStmt(bStmt); err != nil {
+			return err
+		}
+	}
+
+	// 5. Schrittweite addieren (Inkrement): Var = Var + Step
+	stepVal := 1
+	if num, ok := s.Step.(*ast.NumberLiteral); ok {
+		stepVal = num.Value
+	}
+	g.emit(OpLDAM, varAddr, "Lade Zaehler")
+	g.emit(OpADD, uint16(stepVal), fmt.Sprintf("Zaehler + %d", stepVal))
+	g.emit(OpSTAM, varAddr, "Speichere Zaehler")
+
+	// Sprung zurück zum Schleifenanfang
+	g.emit(OpBA, 0, "FOR Loop Sprung")
+	g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopStartLabel})
+
+	g.labels[loopEndLabel] = g.pc
+	return nil
+}
+
+func (g *CodeGenerator) compileRead(s *ast.ReadStmt) error {
+	ptrAddr := g.getOrCreateVar("__data_ptr")
+
+	for _, vName := range s.VarNames {
+		vAddr := g.getOrCreateVar(vName)
+
+		// Indirekter Zugriff: Lade [__data_ptr] über Pointer
+		g.emit(OpLDAMM, ptrAddr, fmt.Sprintf("READ %s", vName))
+		g.emit(OpSTAM, vAddr, fmt.Sprintf("Speichere in %s", vName))
+
+		// Inkrementiere Pointer: __data_ptr++
+		g.emit(OpLDAM, ptrAddr, "Lade __data_ptr")
+		g.emit(OpADD, 1, "__data_ptr + 1")
+		g.emit(OpSTAM, ptrAddr, "Aktualisiere __data_ptr")
+	}
+	return nil
+}
+
+// ============================================================================
+// AUSDRÜCKE (EXPRESSIONS) IN ACCU KOMPILIEREN
+// ============================================================================
+
+func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
+	switch e := expr.(type) {
+	case *ast.NumberLiteral:
+		g.emit(OpLDA, uint16(e.Value), fmt.Sprintf("Konstante %d", e.Value))
+		return nil
+
+	case *ast.VariableExpr:
+		addr := g.getOrCreateVar(e.Name)
+		g.emit(OpLDAM, addr, fmt.Sprintf("Variable %s", e.Name))
+		return nil
+
+	case *ast.UnaryExpr:
+		if err := g.compileExpr(e.Right); err != nil {
+			return err
+		}
+		if e.Op == "-" {
+			// Negation: ~Accu + 1
+			g.emit(OpNOT, 0, "Negation: NOT")
+			g.emit(OpADD, 1, "Negation: + 1")
+		} else if e.Op == "NOT" {
+			g.emit(OpNOT, 0, "Bitweises NOT")
+		}
+		return nil
+
+	case *ast.BinaryExpr:
+		return g.compileBinary(e)
+
+	case *ast.PeekExpr:
+		if err := g.compileExpr(e.Address); err != nil {
+			return err
+		}
+		patchLoad := g.pc + 3
+		g.emit(OpSTAM, patchLoad, "Patch PEEK Quelladresse")
+		g.emit(OpLDAM, 0, "PEEK [dynamisch]")
+		return nil
+
+	default:
+		return fmt.Errorf("Unbekannter Ausdruckstyp: %T", expr)
+	}
+}
+
+func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
+	op := strings.ToUpper(e.Op)
+
+	// Spezialfall: Multiplikation (*)
+	if op == "*" {
+		g.needMul = true
+		if err := g.compileExpr(e.Left); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, g.getOrCreateVar("__r0"), "Multiplikand __r0")
+
+		if err := g.compileExpr(e.Right); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, g.getOrCreateVar("__r1"), "Multiplikator __r1")
+
+		g.emit(OpCALL, 0, "CALL __mul")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_mul"})
+		return nil
+	}
+
+	// Spezialfall: Division (/) oder Modulo (MOD)
+	if op == "/" || op == "MOD" {
+		g.needDiv = true
+		if err := g.compileExpr(e.Left); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, g.getOrCreateVar("__r0"), "Dividend __r0")
+
+		if err := g.compileExpr(e.Right); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, g.getOrCreateVar("__r1"), "Divisor __r1")
+
+		g.emit(OpCALL, 0, "CALL __div")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_div"})
+
+		if op == "MOD" {
+			g.emit(OpLDAM, g.getOrCreateVar("__rem"), "Lade Divisionsrest")
+		}
+		return nil
+	}
+
+	// Rechte Seite in temporäre Zelle evaluieren
+	if err := g.compileExpr(e.Right); err != nil {
+		return err
+	}
+	tempRight := g.allocTemp()
+	g.emit(OpSTAM, tempRight, "Rechter Operand")
+
+	// Linke Seite in Accu evaluieren
+	if err := g.compileExpr(e.Left); err != nil {
+		return err
+	}
+
+	// Operation auf Accu ausführen
+	switch op {
+	case "+":
+		// Accu = Accu + [tempRight]
+		tempA := g.allocTemp()
+		g.emit(OpSTAM, tempA, "Temp Accu sichern")
+		g.emit(OpLDAM, tempRight, "Lade B")
+		patchAddr := g.pc + 5
+		g.emit(OpSTAM, patchAddr, "Patch ADD Operand")
+		g.emit(OpLDAM, tempA, "Lade A zurueck")
+		g.emit(OpADD, 0, "A + B")
+
+	case "-":
+		// Accu = Accu - [tempRight] = A + (~B + 1)
+		tempA := g.allocTemp()
+		g.emit(OpSTAM, tempA, "Temp A sichern")
+		g.emit(OpLDAM, tempRight, "Lade B")
+		g.emit(OpNOT, 0, "~B")
+		g.emit(OpADD, 1, "~B + 1 (-B)")
+		patchAddr := g.pc + 5
+		g.emit(OpSTAM, patchAddr, "Patch ADD Operand mit -B")
+		g.emit(OpLDAM, tempA, "Lade A zurueck")
+		g.emit(OpADD, 0, "A + (-B)")
+
+	case "AND":
+		g.emit(OpAND, 0xFFFF, "AND Operation")
+
+	case "OR":
+		g.emit(OpOR, 0x0000, "OR Operation")
+
+	case "SHL":
+		g.emit(OpSHL, 0, "SHL Linksshift")
+
+	case "SHR":
+		g.emit(OpSHR, 0, "SHR Rechtsshift")
+
+	case "=", "==":
+		// A == B: Subtrahiere A - B, wenn Zero -> 1, sonst 0
+		return g.compileComparison(tempRight, OpBZ)
+
+	case "<>", "!=":
+		// A <> B: Wenn Zero -> 0, sonst 1
+		return g.compileComparison(tempRight, OpBZ, true)
+
+	case "<":
+		// A < B: Wenn Negative -> 1, sonst 0
+		return g.compileComparison(tempRight, OpBN)
+
+	case ">=":
+		// A >= B: Wenn Negative -> 0, sonst 1
+		return g.compileComparison(tempRight, OpBN, true)
+
+	case ">":
+		// A > B: B - A < 0 (Negative) -> 1, sonst 0
+		return g.compileComparisonReverse(tempRight, OpBN)
+
+	case "<=":
+		// A <= B: B - A < 0 -> 0, sonst 1
+		return g.compileComparisonReverse(tempRight, OpBN, true)
+	}
+
+	return nil
+}
+
+func (g *CodeGenerator) compileComparison(tempRight uint16, branchOp uint16, invert ...bool) error {
+	// A liegt im Accu. Berechne A - B
+	tempA := g.allocTemp()
+	g.emit(OpSTAM, tempA, "Sichere A")
+	g.emit(OpLDAM, tempRight, "Lade B")
+	g.emit(OpNOT, 0, "~B")
+	g.emit(OpADD, 1, "-B")
+	patchAddr := g.pc + 5
+	g.emit(OpSTAM, patchAddr, "Patch -B")
+	g.emit(OpLDAM, tempA, "Lade A")
+	g.emit(OpADD, 0, "A - B")
+
+	trueLabel := fmt.Sprintf("__comp_true_%d", g.pc)
+	endLabel := fmt.Sprintf("__comp_end_%d", g.pc)
+
+	inv := len(invert) > 0 && invert[0]
+
+	if !inv {
+		g.emit(branchOp, 0, "Branch Bedingung erfuellt")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: trueLabel})
+		g.emit(OpLDA, 0, "Ergebnis = 0 (False)")
+		g.emit(OpBA, 0, "Sprung zu Comp-Ende")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: endLabel})
+
+		g.labels[trueLabel] = g.pc
+		g.emit(OpLDA, 1, "Ergebnis = 1 (True)")
+		g.labels[endLabel] = g.pc
+	} else {
+		g.emit(branchOp, 0, "Branch invertiert")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: trueLabel})
+		g.emit(OpLDA, 1, "Ergebnis = 1 (True)")
+		g.emit(OpBA, 0, "Sprung zu Comp-Ende")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: endLabel})
+
+		g.labels[trueLabel] = g.pc
+		g.emit(OpLDA, 0, "Ergebnis = 0 (False)")
+		g.labels[endLabel] = g.pc
+	}
+
+	return nil
+}
+
+func (g *CodeGenerator) compileComparisonReverse(tempRight uint16, branchOp uint16, invert ...bool) error {
+	// A liegt im Accu. Berechne B - A
+	tempA := g.allocTemp()
+	g.emit(OpSTAM, tempA, "Sichere A")
+	g.emit(OpNOT, 0, "~A")
+	g.emit(OpADD, 1, "-A")
+	patchAddr := g.pc + 5
+	g.emit(OpSTAM, patchAddr, "Patch -A")
+	g.emit(OpLDAM, tempRight, "Lade B")
+	g.emit(OpADD, 0, "B - A")
+
+	trueLabel := fmt.Sprintf("__comp_rev_true_%d", g.pc)
+	endLabel := fmt.Sprintf("__comp_rev_end_%d", g.pc)
+
+	inv := len(invert) > 0 && invert[0]
+
+	if !inv {
+		g.emit(branchOp, 0, "Branch Bedingung erfuellt")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: trueLabel})
+		g.emit(OpLDA, 0, "Ergebnis = 0 (False)")
+		g.emit(OpBA, 0, "Sprung zu Comp-Ende")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: endLabel})
+
+		g.labels[trueLabel] = g.pc
+		g.emit(OpLDA, 1, "Ergebnis = 1 (True)")
+		g.labels[endLabel] = g.pc
+	} else {
+		g.emit(branchOp, 0, "Branch invertiert")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: trueLabel})
+		g.emit(OpLDA, 1, "Ergebnis = 1 (True)")
+		g.emit(OpBA, 0, "Sprung zu Comp-Ende")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: endLabel})
+
+		g.labels[trueLabel] = g.pc
+		g.emit(OpLDA, 0, "Ergebnis = 0 (False)")
+		g.labels[endLabel] = g.pc
+	}
+
+	return nil
+}
+
+// ============================================================================
+// RUNTIME-BIBLIOTHEK (MULTIPLIKATION, DIVISION, DISPLAY)
+// ============================================================================
+
+func (g *CodeGenerator) emitRuntimeRoutines() {
+	// 1. Multiplikation __mul (__r0 * __r1 -> Accu)
+	if g.needMul {
+		g.labels["__runtime_mul"] = g.pc
+		r0Addr := g.getOrCreateVar("__r0")
+		r1Addr := g.getOrCreateVar("__r1")
+		prodAddr := g.getOrCreateVar("__prod")
+
+		g.emit(OpLDA, 0, "__mul: Initialisiere Produkt = 0")
+		g.emit(OpSTAM, prodAddr, "prod = 0")
+
+		loopPC := g.pc
+		g.labels["__mul_loop"] = loopPC
+
+		g.emit(OpLDAM, r1Addr, "__mul: Lade Faktor 2")
+		g.emit(OpBZ, 0, "__mul: Wenn Faktor 2 == 0 -> Fertig")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__mul_done"})
+
+		// Prüfe LSB(r1) mit BE (Even)
+		g.emit(OpBE, 0, "__mul: Wenn Even -> Skip Addition")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__mul_skip_add"})
+
+		// Addiere r0 zu prod
+		g.emit(OpLDAM, r0Addr, "__mul: Lade r0")
+		patchAdd := g.pc + 5
+		g.emit(OpSTAM, patchAdd, "Patch ADD")
+		g.emit(OpLDAM, prodAddr, "Lade prod")
+		g.emit(OpADD, 0, "prod + r0")
+		g.emit(OpSTAM, prodAddr, "Aktualisiere prod")
+
+		g.labels["__mul_skip_add"] = g.pc
+		// Shift r0 links, r1 rechts
+		g.emit(OpLDAM, r0Addr, "Shift r0 links")
+		g.emit(OpSHL, 0, "r0 << 1")
+		g.emit(OpSTAM, r0Addr, "Speichere r0")
+
+		g.emit(OpLDAM, r1Addr, "Shift r1 rechts")
+		g.emit(OpSHR, 0, "r1 >> 1")
+		g.emit(OpSTAM, r1Addr, "Speichere r1")
+
+		g.emit(OpBA, loopPC, "Loop __mul")
+
+		g.labels["__mul_done"] = g.pc
+		g.emit(OpLDAM, prodAddr, "__mul: Rueckgabe Produkt")
+		g.emitSingle(OpRET, "RETURN __mul")
+	}
+
+	// 2. Division __div (__r0 / __r1 -> Accu, Rest in __rem)
+	if g.needDiv {
+		g.labels["__runtime_div"] = g.pc
+		r0Addr := g.getOrCreateVar("__r0")
+		r1Addr := g.getOrCreateVar("__r1")
+		quotAddr := g.getOrCreateVar("__quot")
+		remAddr := g.getOrCreateVar("__rem")
+
+		g.emit(OpLDA, 0, "__div: Initialisiere Quotient = 0")
+		g.emit(OpSTAM, quotAddr, "quot = 0")
+		g.emit(OpLDAM, r0Addr, "Lade Dividend in Remainder")
+		g.emit(OpSTAM, remAddr, "rem = dividend")
+
+		divLoopPC := g.pc
+		g.labels["__div_loop"] = divLoopPC
+
+		// Berechne rem - divisor
+		g.emit(OpLDAM, r1Addr, "Lade Divisor")
+		g.emit(OpNOT, 0, "~Divisor")
+		g.emit(OpADD, 1, "-Divisor")
+		patchDiv := g.pc + 5
+		g.emit(OpSTAM, patchDiv, "Patch Divisor")
+		g.emit(OpLDAM, remAddr, "Lade rem")
+		g.emit(OpADD, 0, "rem - Divisor")
+
+		// Wenn negativ -> Divisor passt nicht mehr hinein -> Fertig
+		g.emit(OpBN, 0, "__div: Fertig wenn rem < Divisor")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__div_done"})
+
+		// Sonst: rem = rem - divisor, quot++
+		g.emit(OpSTAM, remAddr, "Aktualisiere rem")
+		g.emit(OpLDAM, quotAddr, "Lade quot")
+		g.emit(OpADD, 1, "quot++")
+		g.emit(OpSTAM, quotAddr, "Speichere quot")
+		g.emit(OpBA, divLoopPC, "Loop __div")
+
+		g.labels["__div_done"] = g.pc
+		g.emit(OpLDAM, quotAddr, "__div: Rueckgabe Quotient")
+		g.emitSingle(OpRET, "RETURN __div")
+	}
+
+	// 3. Display Löschen __cls (960..1023 mit 0 füllen)
+	if g.needCls {
+		g.labels["__runtime_cls"] = g.pc
+		ptrCls := g.getOrCreateVar("__cls_ptr")
+		g.emit(OpLDA, DisplayBase, "__cls: Startadresse 960")
+		g.emit(OpSTAM, ptrCls, "Speichere Display-Zeiger")
+
+		clsLoop := g.pc
+		g.labels["__cls_loop"] = clsLoop
+
+		g.emit(OpLDAM, ptrCls, "Lade Zeiger")
+		patchCls := g.pc + 5
+		g.emit(OpSTAM, patchCls, "Patch Zieladresse")
+		g.emit(OpLDA, 0, "Pixeldaten = 0")
+		g.emit(OpSTAM, 0, "Schreibe in Display")
+
+		g.emit(OpLDAM, ptrCls, "Zeiger inkrementieren")
+		g.emit(OpADD, 1, "ptr++")
+		g.emit(OpSTAM, ptrCls, "Speichere ptr")
+
+		// Prüfe ob ptr == 1024 (0xFC00 in 2er Komplement für -1024)
+		g.emit(OpADD, 0xFC00, "ptr - 1024")
+		g.emit(OpBZ, 0, "__cls: Fertig bei 1024")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__cls_done"})
+
+		g.emit(OpBA, clsLoop, "Loop __cls")
+
+		g.labels["__cls_done"] = g.pc
+		g.emitSingle(OpRET, "RETURN __cls")
+	}
+
+	// 4. Pixel setzen __pset (PSET X, Y, Color)
+	if g.needPset {
+		g.labels["__runtime_pset"] = g.pc
+		// WordAddr = DisplayBase + (Y * 2) + (X / 16)
+		xAddr := g.getOrCreateVar("__pset_x")
+		yAddr := g.getOrCreateVar("__pset_y")
+		cAddr := g.getOrCreateVar("__pset_c")
+		wordAddr := g.getOrCreateVar("__pset_word_addr")
+
+		// Base + Y*2
+		g.emit(OpLDAM, yAddr, "__pset: Lade Y")
+		g.emit(OpSHL, 0, "Y * 2")
+		g.emit(OpADD, DisplayBase, "Base + Y*2")
+		g.emit(OpSTAM, wordAddr, "Speichere wordAddr")
+
+		// Offset für X/16 (wenn X >= 16)
+		g.emit(OpLDAM, xAddr, "Lade X")
+		g.emit(OpSHR, 0, "X >> 1")
+		g.emit(OpSHR, 0, "X >> 2")
+		g.emit(OpSHR, 0, "X >> 3")
+		g.emit(OpSHR, 0, "X >> 4 (X / 16)")
+		patchX := g.pc + 5
+		g.emit(OpSTAM, patchX, "Patch X Offset")
+		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
+		g.emit(OpADD, 0, "wordAddr + (X / 16)")
+		g.emit(OpSTAM, wordAddr, "Final wordAddr")
+
+		// Schreibe Color-Muster in Display-Zelle
+		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
+		patchPset := g.pc + 5
+		g.emit(OpSTAM, patchPset, "Patch Zieladresse")
+		g.emit(OpLDAM, cAddr, "Lade Color")
+		g.emit(OpSTAM, 0, "Schreibe Pixelwort in Display")
+
+		g.emitSingle(OpRET, "RETURN __pset")
+	}
+}
+
+func (g *CodeGenerator) emitDataTable() {
+	g.dataPtr = g.pc
+	g.labels["__data_table_start"] = g.dataPtr
+
+	if len(g.dataTable) == 0 {
+		return
+	}
+
+	// Setze __data_ptr Initialwert
+	ptrAddr := g.getOrCreateVar("__data_ptr")
+	g.memory[ptrAddr] = g.dataPtr
+
+	for _, val := range g.dataTable {
+		g.memory[g.pc] = uint16(val & 0xFFFF)
+		g.comments[g.pc] = fmt.Sprintf("DATA %d", val)
+		g.pc++
+	}
+}
+
+// ============================================================================
+// HILFSFUNKTIONEN: EMIT & SPEICHERVERWALTUNG
+// ============================================================================
+
+func (g *CodeGenerator) emit(op uint16, operand uint16, comment string) {
+	if g.pc >= MaxMemorySize-1 {
+		return
+	}
+	g.memory[g.pc] = op
+	g.comments[g.pc] = comment
+	g.pc++
+
+	g.memory[g.pc] = operand
+	g.comments[g.pc] = fmt.Sprintf("Operand #0x%04X (%d)", operand, operand)
+	g.pc++
+}
+
+func (g *CodeGenerator) emitSingle(op uint16, comment string) {
+	if g.pc >= MaxMemorySize {
+		return
+	}
+	g.memory[g.pc] = op
+	g.comments[g.pc] = comment
+	g.pc++
+}
+
+func (g *CodeGenerator) getOrCreateVar(name string) uint16 {
+	upper := strings.ToUpper(name)
+	if addr, exists := g.symbols[upper]; exists {
+		return addr
+	}
+	addr := g.nextVarAddr
+	g.symbols[upper] = addr
+	g.nextVarAddr++
+	return addr
+}
+
+func (g *CodeGenerator) allocTemp() uint16 {
+	addr := g.nextTempAddr
+	g.nextTempAddr++
+	if g.nextTempAddr >= DisplayBase {
+		g.nextTempAddr = TempBaseAddr // Wrap around
+	}
+	return addr
+}
