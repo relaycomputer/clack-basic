@@ -1,6 +1,4 @@
-# Binaries
-bin/
-*.exe
+# Test binary & coverage
 *.test
 *.out
 
