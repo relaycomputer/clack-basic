@@ -217,9 +217,11 @@ type OutStmt struct {
 func (o *OutStmt) Pos() int  { return o.Line }
 func (o *OutStmt) stmtNode() {}
 
-// ClsStmt: Löscht Display Matrix (Worte 960..1023) -> CLS
+// ClsStmt: Löscht Display Matrix (ganz oder Zeilenbereich) -> CLS oder CLS StartRow, EndRow
 type ClsStmt struct {
-	Line int
+	StartRow Expr
+	EndRow   Expr
+	Line     int
 }
 
 func (c *ClsStmt) Pos() int  { return c.Line }

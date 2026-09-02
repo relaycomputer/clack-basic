@@ -23,8 +23,8 @@ import (
 
 const (
 	MaxMemorySize = 1024
-	VarBaseAddr   = 900 // Variablen werden ab Adresse 900 abgelegt
-	TempBaseAddr  = 930 // Temporäre Berechnungszellen ab Adresse 930
+	VarBaseAddr   = 930 // Variablen werden ab Adresse 930 abgelegt
+	TempBaseAddr  = 950 // Temporäre Berechnungszellen ab Adresse 950
 	DisplayBase   = 960 // Display-Bereich: 960..1023
 )
 
@@ -206,6 +206,33 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 
 	case *ast.ClsStmt:
 		g.needCls = true
+		ptrCls := g.getOrCreateVar("__cls_ptr")
+		endCls := g.getOrCreateVar("__cls_end_addr")
+
+		if s.StartRow != nil {
+			// StartAddr = DisplayBase + StartRow * 2
+			if err := g.compileExpr(s.StartRow); err != nil {
+				return err
+			}
+			g.emit(OpSHL, 0, "StartRow * 2")
+			g.emit(OpADD, DisplayBase, "DisplayBase + StartRow*2")
+			g.emit(OpSTAM, ptrCls, "Setze __cls_ptr")
+
+			// EndAddr = DisplayBase + EndRow * 2 + 2
+			if err := g.compileExpr(s.EndRow); err != nil {
+				return err
+			}
+			g.emit(OpSHL, 0, "EndRow * 2")
+			g.emit(OpADD, DisplayBase+2, "DisplayBase + EndRow*2 + 2")
+			g.emit(OpSTAM, endCls, "Setze __cls_end_addr")
+		} else {
+			// Volles Display löschen: 960 bis 1024
+			g.emit(OpLDA, DisplayBase, "Init __cls_ptr (960)")
+			g.emit(OpSTAM, ptrCls, "Speichere __cls_ptr")
+			g.emit(OpLDA, 1024, "Init __cls_end_addr (1024)")
+			g.emit(OpSTAM, endCls, "Speichere __cls_end_addr")
+		}
+
 		g.emit(OpCALL, 0, "CALL __cls (Display loeschen)")
 		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_cls"})
 		return nil
@@ -447,6 +474,35 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 			g.emit(OpLDAM, g.getOrCreateVar("__rem"), "Lade Divisionsrest")
 		}
 		return nil
+	}
+
+	// Schnelle Optimierung für unmittelbare Zahlenkonstanten (+, -, AND, OR)
+	if num, ok := e.Right.(*ast.NumberLiteral); ok {
+		if op == "+" {
+			if err := g.compileExpr(e.Left); err != nil {
+				return err
+			}
+			g.emit(OpADD, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu + %d", num.Value))
+			return nil
+		} else if op == "-" {
+			if err := g.compileExpr(e.Left); err != nil {
+				return err
+			}
+			g.emit(OpADD, uint16((-num.Value)&0xFFFF), fmt.Sprintf("Accu - %d", num.Value))
+			return nil
+		} else if op == "AND" {
+			if err := g.compileExpr(e.Left); err != nil {
+				return err
+			}
+			g.emit(OpAND, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu AND 0x%04X", num.Value))
+			return nil
+		} else if op == "OR" {
+			if err := g.compileExpr(e.Left); err != nil {
+				return err
+			}
+			g.emit(OpOR, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu OR 0x%04X", num.Value))
+			return nil
+		}
 	}
 
 	// Rechte Seite in temporäre Zelle evaluieren
@@ -700,12 +756,11 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emitSingle(OpRET, "RETURN __div")
 	}
 
-	// 3. Display Löschen __cls (960..1023 mit 0 füllen)
+	// 3. Display Löschen __cls (von __cls_ptr bis __cls_end_addr)
 	if g.needCls {
 		g.labels["__runtime_cls"] = g.pc
 		ptrCls := g.getOrCreateVar("__cls_ptr")
-		g.emit(OpLDA, DisplayBase, "__cls: Startadresse 960")
-		g.emit(OpSTAM, ptrCls, "Speichere Display-Zeiger")
+		endCls := g.getOrCreateVar("__cls_end_addr")
 
 		clsLoop := g.pc
 		g.labels["__cls_loop"] = clsLoop
@@ -720,9 +775,15 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emit(OpADD, 1, "ptr++")
 		g.emit(OpSTAM, ptrCls, "Speichere ptr")
 
-		// Prüfe ob ptr == 1024 (0xFC00 in 2er Komplement für -1024)
-		g.emit(OpADD, 0xFC00, "ptr - 1024")
-		g.emit(OpBZ, 0, "__cls: Fertig bei 1024")
+		// Prüfe ob ptr == endCls: berechne ptr - endCls
+		g.emit(OpLDAM, endCls, "Lade endCls")
+		g.emit(OpNOT, 0, "~endCls")
+		g.emit(OpADD, 1, "~endCls + 1")
+		patchEnd := g.pc + 5
+		g.emit(OpSTAM, patchEnd, "Patch Endvergleich")
+		g.emit(OpLDAM, ptrCls, "Lade ptr")
+		g.emit(OpADD, 0, "ptr - endCls")
+		g.emit(OpBZ, 0, "__cls: Fertig bei endCls")
 		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__cls_done"})
 
 		g.emit(OpBA, clsLoop, "Loop __cls")
@@ -731,16 +792,18 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emitSingle(OpRET, "RETURN __cls")
 	}
 
-	// 4. Pixel setzen __pset (PSET X, Y, Color)
+	// 4. Pixel setzen/löschen __pset (PSET X, Y, Color) mit echtem Bit-Masking
 	if g.needPset {
 		g.labels["__runtime_pset"] = g.pc
-		// WordAddr = DisplayBase + (Y * 2) + (X / 16)
 		xAddr := g.getOrCreateVar("__pset_x")
 		yAddr := g.getOrCreateVar("__pset_y")
 		cAddr := g.getOrCreateVar("__pset_c")
 		wordAddr := g.getOrCreateVar("__pset_word_addr")
+		maskAddr := g.getOrCreateVar("__pset_mask")
+		countAddr := g.getOrCreateVar("__pset_count")
+		currWordAddr := g.getOrCreateVar("__pset_curr_word")
 
-		// Base + Y*2
+		// 1. Berechne WordAddr = DisplayBase + (Y * 2) + (X / 16)
 		g.emit(OpLDAM, yAddr, "__pset: Lade Y")
 		g.emit(OpSHL, 0, "Y * 2")
 		g.emit(OpADD, DisplayBase, "Base + Y*2")
@@ -758,11 +821,65 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emit(OpADD, 0, "wordAddr + (X / 16)")
 		g.emit(OpSTAM, wordAddr, "Final wordAddr")
 
-		// Schreibe Color-Muster in Display-Zelle
+		// 2. Berechne Bitmaske = 0x8000 >> (X & 15)
+		g.emit(OpLDA, 0x8000, "Init Maske = 0x8000 (Bit 15)")
+		g.emit(OpSTAM, maskAddr, "Speichere Startmaske")
+		g.emit(OpLDAM, xAddr, "Lade X")
+		g.emit(OpAND, 0x000F, "X & 15 (Bit-Index)")
+		g.emit(OpSTAM, countAddr, "Speichere Shift-Count")
+
+		// Mask-Shift-Schleife
+		maskLoop := g.pc
+		g.emit(OpLDAM, countAddr, "Lade Shift-Count")
+		g.emit(OpBZ, 0, "Fertig wenn Count == 0")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__pset_mask_ready"})
+		g.emit(OpADD, 0xFFFF, "Count - 1")
+		g.emit(OpSTAM, countAddr, "Speichere Count")
+		g.emit(OpLDAM, maskAddr, "Lade Maske")
+		g.emit(OpSHR, 0, "Maske >> 1")
+		g.emit(OpSTAM, maskAddr, "Speichere Maske")
+		g.emit(OpBA, maskLoop, "Loop Mask-Shift")
+
+		g.labels["__pset_mask_ready"] = g.pc
+
+		// 3. Lade aktuellen Bildschirminhalt an wordAddr
 		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
-		patchPset := g.pc + 5
-		g.emit(OpSTAM, patchPset, "Patch Zieladresse")
+		patchRead := g.pc + 5
+		g.emit(OpSTAM, patchRead, "Patch Leseadresse")
+		g.emit(OpLDAM, 0, "Lade aktuellen Wortwert")
+		g.emit(OpSTAM, currWordAddr, "Speichere currWord")
+
+		// 4. Prüfe Color: Wenn Color == 0 -> Pixel löschen, sonst Pixel setzen
 		g.emit(OpLDAM, cAddr, "Lade Color")
+		g.emit(OpBZ, 0, "Wenn Color == 0 -> Clear Pixel")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__pset_clear"})
+
+		// SET PIXEL: currWord | mask
+		g.emit(OpLDAM, maskAddr, "Lade Maske")
+		patchOr := g.pc + 5
+		g.emit(OpSTAM, patchOr, "Patch OR-Operand")
+		g.emit(OpLDAM, currWordAddr, "Lade currWord")
+		g.emit(OpOR, 0, "currWord | mask")
+		g.emit(OpSTAM, currWordAddr, "Speichere neues currWord")
+		g.emit(OpBA, 0, "Sprung zu Write")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__pset_write"})
+
+		// CLEAR PIXEL: currWord & ~mask
+		g.labels["__pset_clear"] = g.pc
+		g.emit(OpLDAM, maskAddr, "Lade Maske")
+		g.emit(OpNOT, 0, "~mask (invertiert)")
+		patchAnd := g.pc + 5
+		g.emit(OpSTAM, patchAnd, "Patch AND-Operand")
+		g.emit(OpLDAM, currWordAddr, "Lade currWord")
+		g.emit(OpAND, 0, "currWord & ~mask")
+		g.emit(OpSTAM, currWordAddr, "Speichere neues currWord")
+
+		// 5. Schreibe modifiziertes Wort zurück in Display
+		g.labels["__pset_write"] = g.pc
+		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
+		patchWrite := g.pc + 5
+		g.emit(OpSTAM, patchWrite, "Patch Schreibadresse")
+		g.emit(OpLDAM, currWordAddr, "Lade geändertes Wort")
 		g.emit(OpSTAM, 0, "Schreibe Pixelwort in Display")
 
 		g.emitSingle(OpRET, "RETURN __pset")

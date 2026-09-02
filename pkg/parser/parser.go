@@ -176,9 +176,7 @@ func (p *Parser) parseStatement() ast.Stmt {
 	case lexer.TOKEN_OUT:
 		return p.parseOutStatement()
 	case lexer.TOKEN_CLS:
-		line := p.curTok.Line
-		p.nextToken()
-		return &ast.ClsStmt{Line: line}
+		return p.parseClsStatement()
 	case lexer.TOKEN_PSET:
 		return p.parsePsetStatement()
 	case lexer.TOKEN_PRINT:
@@ -518,6 +516,26 @@ func (p *Parser) parseOutStatement() ast.Stmt {
 	val := p.parseExpression(PREC_LOWEST)
 
 	return &ast.OutStmt{Port: port, Value: val, Line: line}
+}
+
+func (p *Parser) parseClsStatement() ast.Stmt {
+	line := p.curTok.Line
+	p.nextToken() // CLS überspringen
+
+	var startRow ast.Expr
+	var endRow ast.Expr
+
+	if p.curTok.Type != lexer.TOKEN_NEWLINE && p.curTok.Type != lexer.TOKEN_COLON && p.curTok.Type != lexer.TOKEN_EOF {
+		startRow = p.parseExpression(PREC_LOWEST)
+		if p.curTok.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // ',' überspringen
+			endRow = p.parseExpression(PREC_LOWEST)
+		} else {
+			endRow = startRow
+		}
+	}
+
+	return &ast.ClsStmt{StartRow: startRow, EndRow: endRow, Line: line}
 }
 
 func (p *Parser) parsePsetStatement() ast.Stmt {
