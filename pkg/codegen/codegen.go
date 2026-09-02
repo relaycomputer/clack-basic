@@ -23,8 +23,8 @@ import (
 
 const (
 	MaxMemorySize = 1024
-	VarBaseAddr   = 500 // Variablen werden ab Adresse 500 abgelegt
-	TempBaseAddr  = 700 // Temporäre Berechnungszellen ab Adresse 700
+	VarBaseAddr   = 900 // Variablen werden ab Adresse 900 abgelegt
+	TempBaseAddr  = 930 // Temporäre Berechnungszellen ab Adresse 930
 	DisplayBase   = 960 // Display-Bereich: 960..1023
 )
 
@@ -114,6 +114,10 @@ func (g *CodeGenerator) Generate(prog *ast.Program) ([MaxMemorySize]uint16, map[
 
 	// DATA-Tabelle im oberen Speicher ablegen
 	g.emitDataTable()
+
+	if g.pc >= VarBaseAddr {
+		return g.memory, g.comments, fmt.Errorf("Programm zu groß: Code-Größe (%d Worte) überschreitet Variablenbereich ab Adresse %d", g.pc, VarBaseAddr)
+	}
 
 	// 2. Pass: Alle offenen Sprungmarken (Fixups) auflösen
 	for _, fix := range g.fixups {
