@@ -817,7 +817,7 @@ CLR
 879 0x1800 // Lade wordAddr
 880 0x03B1 // Operand #0x03B1 (945)
 881 0x2800 // Patch Leseadresse
-882 0x0376 // Operand #0x0376 (886)
+882 0x0374 // Operand #0x0374 (884)
 883 0x1800 // Lade aktuellen Wortwert
 885 0x2800 // Speichere currWord
 886 0x03B4 // Operand #0x03B4 (948)

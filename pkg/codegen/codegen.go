@@ -844,7 +844,7 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 
 		// 3. Lade aktuellen Bildschirminhalt an wordAddr
 		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
-		patchRead := g.pc + 5
+		patchRead := g.pc + 3
 		g.emit(OpSTAM, patchRead, "Patch Leseadresse")
 		g.emit(OpLDAM, 0, "Lade aktuellen Wortwert")
 		g.emit(OpSTAM, currWordAddr, "Speichere currWord")
