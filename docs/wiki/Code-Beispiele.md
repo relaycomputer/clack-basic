@@ -1,53 +1,71 @@
-# 🏓 Clack-BASIC Code-Beispiele
+# 🎮 Clack-BASIC: Beispielprogramme
 
-Hier findest du vollständige, getestete Beispielprogramme für den 16-Bit Relaisrechner.
+Hier findest du praxiserprobte Beispielprogramme, die direkt im Standalone-CLI oder im Web-Studio ausgeführt werden können:
 
 ---
 
-## 1. 🏓 Autonomes Ping-Pong (`ping_pong.bas`)
-
-Ein vollständiges, selbstspielendes Pong-Spiel mit zwei computergesteuerten Paddles und Ball-Physik auf der 32×32 LED-Matrix:
+## 🏓 1. Ultra-Fast Autonomes Ping-Pong (`ping_pong.bas`)
+Demonstriert autonomes Delta-Rendering, KI-Steuerung und Kollisionsphysik auf der 32×32 LED-Matrix:
 
 ```basic
 REM ============================================================
-REM 🏓 Clack-BASIC: Autonomes Ping-Pong (Self-Playing AI Pong)
-REM Laeuft in Echtzeit auf der 32x32 LED-Matrix (Worte 960..1023)
+REM 🏓 Clack-BASIC: Ultra-Fast Autonomes Ping-Pong
 REM ============================================================
 
+REM 1. Einmalig Display leeren
 CLS
 
+REM Ball-Koordinaten (Startmitte)
 LET BX = 16
 LET BY = 16
+LET OLD_BX = 16
+LET OLD_BY = 16
 LET VX = 1
 LET VY = 1
 
+REM Paddle-Positionen (Hoehe 4 Pixel)
 LET LY = 14
 LET RY = 14
+LET OLD_LY = 14
+LET OLD_RY = 14
 
 GAME_LOOP:
-    REM --- Frame leeren ---
-    CLS
+    REM --- Alte Positionen gezielt löschen (Zero Flicker!) ---
+    PSET 1, OLD_LY, 0
+    PSET 1, OLD_LY + 1, 0
+    PSET 1, OLD_LY + 2, 0
+    PSET 1, OLD_LY + 3, 0
     
-    REM --- 1. Linkes Paddle (X=1, Hoehe 4) ---
-    PSET 1, LY, 0xFFFF
-    PSET 1, LY + 1, 0xFFFF
-    PSET 1, LY + 2, 0xFFFF
-    PSET 1, LY + 3, 0xFFFF
+    PSET 30, OLD_RY, 0
+    PSET 30, OLD_RY + 1, 0
+    PSET 30, OLD_RY + 2, 0
+    PSET 30, OLD_RY + 3, 0
     
-    REM --- 2. Rechtes Paddle (X=30, Hoehe 4) ---
-    PSET 30, RY, 0xFFFF
-    PSET 30, RY + 1, 0xFFFF
-    PSET 30, RY + 2, 0xFFFF
-    PSET 30, RY + 3, 0xFFFF
+    PSET OLD_BX, OLD_BY, 0
     
-    REM --- 3. Ball zeichnen ---
-    PSET BX, BY, 0xFFFF
+    REM --- Neue Positionen zeichnen ---
+    PSET 1, LY, 1
+    PSET 1, LY + 1, 1
+    PSET 1, LY + 2, 1
+    PSET 1, LY + 3, 1
     
-    REM --- 4. Ball bewegen ---
+    PSET 30, RY, 1
+    PSET 30, RY + 1, 1
+    PSET 30, RY + 2, 1
+    PSET 30, RY + 3, 1
+    
+    PSET BX, BY, 1
+    
+    REM --- Positionen merken ---
+    LET OLD_LY = LY
+    LET OLD_RY = RY
+    LET OLD_BX = BX
+    LET OLD_BY = BY
+    
+    REM --- Ball bewegen & Kollisionen ---
     LET BX = BX + VX
     LET BY = BY + VY
     
-    REM --- 5. Bandenkollision oben / unten ---
     IF BY <= 1 THEN
         LET VY = 1
     END IF
@@ -55,7 +73,6 @@ GAME_LOOP:
         LET VY = -1
     END IF
     
-    REM --- 6. Paddle-Kollision Links / Rechts ---
     IF BX <= 2 THEN
         LET VX = 1
     END IF
@@ -63,7 +80,7 @@ GAME_LOOP:
         LET VX = -1
     END IF
     
-    REM --- 7. Autonome KI: Paddles folgen Ballhoehe ---
+    REM --- KI: Paddles folgen Ball ---
     IF BY > LY + 1 THEN
         IF LY < 27 THEN
             LET LY = LY + 1
@@ -87,43 +104,4 @@ GAME_LOOP:
     END IF
     
     GOTO GAME_LOOP
-```
-
----
-
-## 2. 🔢 Mathematik & Logiktest (`math_test.bas`)
-
-```basic
-LET A = 25
-LET B = 14
-
-LET C = A + B
-LET D = A - B
-LET P = 12 * 7
-LET Q = 100 / 8
-LET R = 100 MOD 8
-
-IF P > 80 THEN
-    LET STATUS = 1
-ELSE
-    LET STATUS = 0
-END IF
-
-HALT
-```
-
----
-
-## 3. 📋 DATA / READ / RESTORE (`data_test.bas`)
-
-```basic
-DATA 100, 200, 300, 400
-
-READ A, B
-READ C, D
-
-RESTORE
-READ FIRST_AGAIN
-
-HALT
 ```
