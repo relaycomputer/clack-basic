@@ -23,7 +23,6 @@ import (
 	"clack-basic/pkg/parser"
 
 	"go.bug.st/serial"
-	"go.bug.st/serial/enumerator"
 )
 
 const (
@@ -239,18 +238,18 @@ func handleFlash(args []string) {
 }
 
 func autoDetectPort() (string, error) {
-	ports, err := enumerator.GetDetailedPortsList()
+	ports, err := serial.GetPortsList()
 	if err != nil {
 		return "", err
 	}
-	for _, p := range ports {
-		desc := strings.ToLower(p.Name + " " + p.Product + " " + p.Manufacturer)
-		if strings.Contains(desc, "arduino") || strings.Contains(desc, "ch340") || strings.Contains(desc, "cp210") || strings.Contains(desc, "ftdi") || strings.HasPrefix(p.Name, "/dev/ttyACM") || strings.HasPrefix(p.Name, "/dev/ttyUSB") {
-			return p.Name, nil
+	for _, name := range ports {
+		desc := strings.ToLower(name)
+		if strings.Contains(desc, "arduino") || strings.Contains(desc, "ch340") || strings.Contains(desc, "cp210") || strings.Contains(desc, "ftdi") || strings.Contains(desc, "ttyacm") || strings.Contains(desc, "ttyusb") || strings.Contains(desc, "usbmodem") || strings.Contains(desc, "usbserial") || strings.Contains(desc, "com") {
+			return name, nil
 		}
 	}
 	if len(ports) > 0 {
-		return ports[0].Name, nil
+		return ports[0], nil
 	}
 	return "", fmt.Errorf("kein serieller Port gefunden")
 }
