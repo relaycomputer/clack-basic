@@ -7,7 +7,7 @@ if [ -z "$TAG" ]; then
   exit 1
 fi
 TITLE="${2:-Release $TAG}"
-TOKEN="${FORGEJO_TOKEN:-15377d6bff6b91b76ccfbbd13f6d1effcb7782be}"
+TOKEN="${FORGEJO_TOKEN:-41a3c242c766575b10db98047bf3acd9106958b9}"
 API_URL="https://forge.scrapheap.eu/api/v1/repos/relay-computing/clack-basic"
 
 echo "==> 1. Compiling Linux, Windows & macOS ARM64 Binaries..."
