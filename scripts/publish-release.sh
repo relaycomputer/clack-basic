@@ -16,26 +16,37 @@ go build -o /tmp/clack-build/clack .
 GOOS=windows GOARCH=amd64 go build -o /tmp/clack-build/clack.exe .
 GOOS=darwin GOARCH=arm64 go build -o /tmp/clack-build/clack-darwin-arm64 .
 
-echo "==> 2. Creating Release $TAG on Forgejo..."
-RESP=$(curl -s -X POST \
+# Copy to local bin/ permanently as well
+mkdir -p bin
+cp /tmp/clack-build/clack bin/
+cp /tmp/clack-build/clack.exe bin/
+cp /tmp/clack-build/clack-darwin-arm64 bin/
+
+echo "==> 2. Creating/Fetching Release $TAG on Forgejo..."
+RESP=$(curl -4 -s -X POST \
   -H "Authorization: token $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"tag_name\": \"$TAG\", \"name\": \"$TITLE\", \"body\": \"Automated release build for $TAG with Linux, Windows x64 and macOS ARM64 (Apple Silicon) binaries.\", \"draft\": false}" \
   "$API_URL/releases")
 
-REL_ID=$(echo "$RESP" | jq -r .id)
-echo "==> Release created with ID: $REL_ID"
+REL_ID=$(echo "$RESP" | jq -r .id 2>/dev/null || echo "null")
+if [ "$REL_ID" = "null" ] || [ -z "$REL_ID" ]; then
+  echo "Release might already exist, fetching existing ID for tag $TAG..."
+  REL_ID=$(curl -4 -s -H "Authorization: token $TOKEN" "$API_URL/releases/tags/$TAG" | jq -r .id)
+fi
+
+echo "==> Release ID: $REL_ID"
 
 echo "==> 3. Uploading Assets..."
-curl -s -X POST -H "Authorization: token $TOKEN" \
+curl -4 -s -X POST -H "Authorization: token $TOKEN" \
   -F "attachment=@/tmp/clack-build/clack.exe;filename=clack.exe" \
   "$API_URL/releases/$REL_ID/assets?name=clack.exe" >/dev/null
 
-curl -s -X POST -H "Authorization: token $TOKEN" \
+curl -4 -s -X POST -H "Authorization: token $TOKEN" \
   -F "attachment=@/tmp/clack-build/clack;filename=clack" \
   "$API_URL/releases/$REL_ID/assets?name=clack" >/dev/null
 
-curl -s -X POST -H "Authorization: token $TOKEN" \
+curl -4 -s -X POST -H "Authorization: token $TOKEN" \
   -F "attachment=@/tmp/clack-build/clack-darwin-arm64;filename=clack-darwin-arm64" \
   "$API_URL/releases/$REL_ID/assets?name=clack-darwin-arm64" >/dev/null
 

@@ -95,16 +95,23 @@ go build -o bin/clack .
 ### Befehle:
 
 ```bash
-# 1. BASIC-Programm kompilieren (Standard: Arduino Loader Format)
+# 1. BASIC-Programm in Maschinencode kompilieren (Standard: Arduino Loader Format)
 ./bin/clack compile examples/math_test.bas -o math_test.txt
 
-# 2. In Assembler-Listing mit Disassembly kompilieren
+# 2. Assembler-Code in Maschinencode assemblieren
+./bin/clack asm examples/bounce.asm -o bounce.txt
+
+# 3. Maschinencode oder Assembler nach Clack-BASIC dekompilieren!
+./bin/clack decompile CollatzReihe.txt -o collatz.bas
+./bin/clack decompile bounce.asm -o bounce.bas
+
+# 4. In Assembler-Listing mit Disassembly kompilieren
 ./bin/clack compile examples/math_test.bas --format=listing
 
-# 3. In C-Array für Simulation kompilieren
+# 5. In C-Array für Simulation kompilieren
 ./bin/clack compile examples/math_test.bas --format=c-array
 
-# 4. Direkt auf den Relais-Computer flashen (mit Auto-Port-Erkennung)
+# 6. Direkt auf den Relais-Computer flashen (mit Auto-Port-Erkennung)
 ./bin/clack flash examples/graphics_demo.bas -m
 ```
 
