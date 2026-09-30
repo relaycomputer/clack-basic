@@ -3,6 +3,7 @@ package decompiler
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,7 @@ type Instruction struct {
 	Mnemonic string
 	IsJump   bool
 	TargetPC int
+	Comment  string
 }
 
 type Decompiler struct {
@@ -24,77 +26,190 @@ type Decompiler struct {
 	used       [1024]bool
 	jumpLabels map[int]string
 	varNames   map[int]string
+	comments   map[int]string
 }
 
 func NewDecompiler() *Decompiler {
 	return &Decompiler{
 		jumpLabels: make(map[int]string),
 		varNames:   make(map[int]string),
+		comments:   make(map[int]string),
 	}
 }
 
+// LoadSource parses multiple array and machine code representations:
+// 1) C / Arduino array assignments: daten[0] = 0x4000; // Comment
+// 2) C99 designated initializers: [0] = 0x4000,
+// 3) VHDL indexed: 0 => x"4000",
+// 4) Arduino loader / simple lines: 0 0x4000 // Comment
+// 5) Hex dump / labels: 0: 0x4000 or 0000: 4000
+// 6) C/C++ array lists: uint16_t daten[] = { 0x4000, 400, ... };
+// 7) VHDL lists: ( x"4000", x"0190", ... )
+// 8) Comma/space-separated hex/decimal stream
 func (d *Decompiler) LoadSource(source string) error {
 	// Clear memory
 	for i := range d.memory {
 		d.memory[i] = 0
 		d.used[i] = false
 	}
+	d.comments = make(map[int]string)
+	d.jumpLabels = make(map[int]string)
+	d.varNames = make(map[int]string)
 
 	reBlockComment := regexp.MustCompile(`(?s)/\*.*?\*/`)
 	cleanSource := reBlockComment.ReplaceAllString(source, "")
 
-	reCArray := regexp.MustCompile(`(?i)daten\[\s*(\d+)\s*\]\s*=\s*(0x[0-9A-Fa-f]+|\d+)\s*;`)
-	reAddrVal := regexp.MustCompile(`^\s*(\d+)\s+(0x[0-9A-Fa-f]+|\d+)\b`)
+	// Regexes for single line / indexed statements
+	reCArray := regexp.MustCompile(`(?i)(?:daten|array|mem|memory|ram|rom|buffer)\s*\[\s*(\d+)\s*\]\s*=\s*(0x[0-9A-Fa-f]+|\d+)\s*;?(?:\s*//\s*(.*))?`)
+	reC99Array := regexp.MustCompile(`(?i)\[\s*(\d+)\s*\]\s*=\s*(0x[0-9A-Fa-f]+|\d+)\s*,?(?:\s*//\s*(.*))?`)
+	reVhdlIndexed := regexp.MustCompile(`(?i)(\d+)\s*=>\s*(?:x"([0-9A-Fa-f]+)"|(0x[0-9A-Fa-f]+|\d+))\s*,?(?:\s*--\s*(.*))?`)
+	reAddrVal := regexp.MustCompile(`^\s*(\d+)[\s:]+(0x[0-9A-Fa-f]+|\d+)\b(?:\s*//\s*(.*))?`)
 
 	lines := strings.Split(cleanSource, "\n")
 	hasMachineLines := false
 
 	for _, rawLine := range lines {
-		line := rawLine
-		if idx := strings.Index(line, "//"); idx >= 0 {
-			line = line[:idx]
-		}
-		if idx := strings.Index(line, ";"); idx >= 0 && !strings.Contains(line, "daten[") {
-			line = line[:idx]
-		}
-		line = strings.TrimSpace(line)
-		if line == "" || strings.EqualFold(line, "CLR") || strings.EqualFold(line, "RUN") {
+		trimmed := strings.TrimSpace(rawLine)
+		if trimmed == "" || strings.EqualFold(trimmed, "CLR") || strings.EqualFold(trimmed, "RUN") {
 			continue
 		}
 
-		var addrStr, valStr string
-		if match := reCArray.FindStringSubmatch(line); len(match) == 3 {
-			addrStr = match[1]
-			valStr = match[2]
-		} else if match := reAddrVal.FindStringSubmatch(line); len(match) == 3 {
-			addrStr = match[1]
-			valStr = match[2]
-		}
-
-		if addrStr != "" && valStr != "" {
-			idx64, err := strconv.ParseUint(addrStr, 10, 16)
-			if err != nil || idx64 >= 1024 {
+		// 1. C-Array: daten[11] = 0x1800; // Comment
+		if match := reCArray.FindStringSubmatch(trimmed); len(match) >= 3 {
+			addrStr := match[1]
+			valStr := match[2]
+			comment := ""
+			if len(match) > 3 {
+				comment = strings.TrimSpace(match[3])
+			}
+			if d.setVal(addrStr, valStr, comment) {
+				hasMachineLines = true
 				continue
 			}
-			var val64 uint64
-			if strings.HasPrefix(strings.ToLower(valStr), "0x") {
-				val64, err = strconv.ParseUint(valStr[2:], 16, 16)
-			} else {
-				val64, err = strconv.ParseUint(valStr, 10, 16)
+		}
+
+		// 2. C99 Designated: [11] = 0x1800,
+		if match := reC99Array.FindStringSubmatch(trimmed); len(match) >= 3 {
+			addrStr := match[1]
+			valStr := match[2]
+			comment := ""
+			if len(match) > 3 {
+				comment = strings.TrimSpace(match[3])
 			}
-			if err == nil {
-				d.memory[idx64] = uint16(val64)
-				d.used[idx64] = true
+			if d.setVal(addrStr, valStr, comment) {
 				hasMachineLines = true
+				continue
 			}
 		}
+
+		// 3. VHDL: 11 => x"1800",
+		if match := reVhdlIndexed.FindStringSubmatch(trimmed); len(match) >= 4 {
+			addrStr := match[1]
+			valStr := match[2]
+			if valStr == "" {
+				valStr = match[3]
+			} else {
+				valStr = "0x" + valStr
+			}
+			comment := ""
+			if len(match) > 4 {
+				comment = strings.TrimSpace(match[4])
+			}
+			if d.setVal(addrStr, valStr, comment) {
+				hasMachineLines = true
+				continue
+			}
+		}
+
+		// 4. Addr Val: 11 0x1800 // Comment
+		if match := reAddrVal.FindStringSubmatch(trimmed); len(match) >= 3 {
+			addrStr := match[1]
+			valStr := match[2]
+			comment := ""
+			if len(match) > 3 {
+				comment = strings.TrimSpace(match[3])
+			}
+			if d.setVal(addrStr, valStr, comment) {
+				hasMachineLines = true
+				continue
+			}
+		}
+	}
+
+	// If no indexed statements were found, try parsing as a sequential array block `{ ... }` or `( ... )`
+	if !hasMachineLines {
+		hasMachineLines = d.parseArrayBlock(cleanSource)
 	}
 
 	if !hasMachineLines {
-		return fmt.Errorf("keine gueltigen Maschinencode-Zeilen (daten[n]=... oder '0 0x1400') gefunden")
+		return fmt.Errorf("keine gueltigen Maschinencode-Zeilen oder Array-Strukturen (daten[n]=..., { 0x... }, '0 0x1400') gefunden")
 	}
 
 	return nil
+}
+
+func (d *Decompiler) parseArrayBlock(text string) bool {
+	// Find content inside { ... } or ( ... ) or [ ... ]
+	startIdx := strings.IndexAny(text, "{([")
+	endIdx := strings.LastIndexAny(text, "})]")
+
+	content := text
+	if startIdx >= 0 && endIdx > startIdx {
+		content = text[startIdx+1 : endIdx]
+	}
+
+	// Split by commas or whitespace
+	reTokens := regexp.MustCompile(`(?:0x[0-9A-Fa-f]+|x"[0-9A-Fa-f]+|\b\d+\b)`)
+	matches := reTokens.FindAllString(content, -1)
+
+	if len(matches) == 0 {
+		return false
+	}
+
+	for idx, token := range matches {
+		if idx >= 1024 {
+			break
+		}
+		var val uint64
+		var err error
+		if strings.HasPrefix(strings.ToLower(token), "x\"") {
+			hexStr := strings.Trim(token[2:], "\"")
+			val, err = strconv.ParseUint(hexStr, 16, 16)
+		} else if strings.HasPrefix(strings.ToLower(token), "0x") {
+			val, err = strconv.ParseUint(token[2:], 16, 16)
+		} else {
+			val, err = strconv.ParseUint(token, 10, 16)
+		}
+		if err == nil {
+			d.memory[idx] = uint16(val)
+			d.used[idx] = true
+		}
+	}
+
+	return true
+}
+
+func (d *Decompiler) setVal(addrStr, valStr, comment string) bool {
+	idx64, err := strconv.ParseUint(addrStr, 10, 16)
+	if err != nil || idx64 >= 1024 {
+		return false
+	}
+	var val64 uint64
+	if strings.HasPrefix(strings.ToLower(valStr), "0x") {
+		val64, err = strconv.ParseUint(valStr[2:], 16, 16)
+	} else {
+		val64, err = strconv.ParseUint(valStr, 10, 16)
+	}
+	if err != nil {
+		return false
+	}
+
+	d.memory[idx64] = uint16(val64)
+	d.used[idx64] = true
+	if comment != "" {
+		d.comments[int(idx64)] = comment
+	}
+	return true
 }
 
 func (d *Decompiler) SetMemory(mem [1024]uint16, used []bool) {
@@ -108,6 +223,247 @@ func (d *Decompiler) SetMemory(mem [1024]uint16, used []bool) {
 	}
 }
 
+// DisassembleToASM converts the loaded machine array into clean, labeled 16-bit Assembler source code (.asm)
+func (d *Decompiler) DisassembleToASM() (string, error) {
+	// 1. First pass: find all branch and call targets to create labels
+	targets := make(map[int]bool)
+	callTargets := make(map[int]bool)
+
+	for pc := 0; pc < 1024; pc++ {
+		if !d.used[pc] && pc > 0 && d.memory[pc] == 0 {
+			continue
+		}
+		cmd := d.memory[pc]
+		switch cmd {
+		case codegen.OpBA, codegen.OpBC, codegen.OpBN, codegen.OpBZ, codegen.OpBE:
+			if pc+1 < 1024 {
+				target := int(d.memory[pc+1])
+				targets[target] = true
+				d.registerLabel(target)
+			}
+			pc++
+		case codegen.OpCALL:
+			if pc+1 < 1024 {
+				target := int(d.memory[pc+1])
+				callTargets[target] = true
+				d.registerSubLabel(target)
+			}
+			pc++
+		case codegen.OpLDA, codegen.OpLDAM, codegen.OpLDAMM, codegen.OpSTAM, codegen.OpSTAMM,
+			codegen.OpADD, codegen.OpAND, codegen.OpOR, codegen.OpNOT, codegen.OpSHR, codegen.OpSHL:
+			pc++
+		}
+	}
+
+	// 2. Second pass: format into Assembler
+	var sb strings.Builder
+	sb.WriteString("; ============================================================\n")
+	sb.WriteString("; ⚡ 16-Bit Relais-Assembler (Dekompiliert aus C/Array-Maschinencode)\n")
+	sb.WriteString("; ============================================================\n\n")
+
+	// Get all used addresses
+	var usedAddrs []int
+	for i := 0; i < 1024; i++ {
+		if d.used[i] {
+			usedAddrs = append(usedAddrs, i)
+		}
+	}
+	sort.Ints(usedAddrs)
+
+	if len(usedAddrs) == 0 {
+		return "; Leeres Programm", nil
+	}
+
+	pc := 0
+	currentOrg := -1
+
+	for pc < 1024 {
+		if !d.used[pc] {
+			// Find next used address
+			nextUsed := -1
+			for k := pc; k < 1024; k++ {
+				if d.used[k] {
+					nextUsed = k
+					break
+				}
+			}
+			if nextUsed == -1 {
+				break
+			}
+			// Skip gap with ORG
+			if nextUsed > pc+1 {
+				sb.WriteString(fmt.Sprintf("\nORG %d\n\n", nextUsed))
+				currentOrg = nextUsed
+			}
+			pc = nextUsed
+		}
+
+		if currentOrg == -1 && pc == 0 {
+			sb.WriteString("ORG 0\n\n")
+			currentOrg = 0
+		}
+
+		// Print Label if this address is targeted
+		if labelName, ok := d.jumpLabels[pc]; ok {
+			sb.WriteString(fmt.Sprintf("\n%s:\n", labelName))
+		}
+
+		cmd := d.memory[pc]
+		c1 := d.comments[pc]
+		var c1Str string
+		if c1 != "" {
+			c1Str = "  ; " + c1
+		}
+
+		switch cmd {
+		case codegen.OpNOP:
+			sb.WriteString(fmt.Sprintf("    NOP%s\n", c1Str))
+			pc++
+		case codegen.OpLDA:
+			op := d.memory[pc+1]
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			if op > 0x8000 && op <= 0xFFFF {
+				neg := int(0x10000 - int(op))
+				sb.WriteString(fmt.Sprintf("    LDA #-%d%s\n", neg, comment))
+			} else if op > 255 {
+				sb.WriteString(fmt.Sprintf("    LDA #0x%04X%s\n", op, comment))
+			} else {
+				sb.WriteString(fmt.Sprintf("    LDA #%d%s\n", op, comment))
+			}
+			pc += 2
+		case codegen.OpLDAM:
+			op := d.memory[pc+1]
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    LDAM %d%s\n", op, comment))
+			pc += 2
+		case codegen.OpLDAMM:
+			op := d.memory[pc+1]
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    LDAMM %d%s\n", op, comment))
+			pc += 2
+		case codegen.OpSTAM:
+			op := d.memory[pc+1]
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    STAM %d%s\n", op, comment))
+			pc += 2
+		case codegen.OpSTAMM:
+			op := d.memory[pc+1]
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    STAMM %d%s\n", op, comment))
+			pc += 2
+		case codegen.OpADD:
+			op := d.memory[pc+1]
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			if op == 0xFFFF {
+				sb.WriteString(fmt.Sprintf("    ADD #-1%s\n", comment))
+			} else if op > 0x8000 {
+				neg := int(0x10000 - int(op))
+				sb.WriteString(fmt.Sprintf("    ADD #-%d%s\n", neg, comment))
+			} else {
+				sb.WriteString(fmt.Sprintf("    ADD #%d%s\n", op, comment))
+			}
+			pc += 2
+		case codegen.OpAND:
+			op := d.memory[pc+1]
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    AND #0x%04X%s\n", op, comment))
+			pc += 2
+		case codegen.OpOR:
+			op := d.memory[pc+1]
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    OR #0x%04X%s\n", op, comment))
+			pc += 2
+		case codegen.OpNOT:
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    NOT%s\n", comment))
+			pc += 2
+		case codegen.OpSHR:
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    SHR%s\n", comment))
+			pc += 2
+		case codegen.OpSHL:
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    SHL%s\n", comment))
+			pc += 2
+		case codegen.OpBA:
+			target := int(d.memory[pc+1])
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    BA %s%s\n", d.getLabel(target), comment))
+			pc += 2
+		case codegen.OpBC:
+			target := int(d.memory[pc+1])
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    BC %s%s\n", d.getLabel(target), comment))
+			pc += 2
+		case codegen.OpBN:
+			target := int(d.memory[pc+1])
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    BN %s%s\n", d.getLabel(target), comment))
+			pc += 2
+		case codegen.OpBZ:
+			target := int(d.memory[pc+1])
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    BZ %s%s\n", d.getLabel(target), comment))
+			pc += 2
+		case codegen.OpBE:
+			target := int(d.memory[pc+1])
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    BE %s%s\n", d.getLabel(target), comment))
+			pc += 2
+		case codegen.OpCALL:
+			target := int(d.memory[pc+1])
+			c2 := d.comments[pc+1]
+			comment := d.combineComments(c1, c2)
+			sb.WriteString(fmt.Sprintf("    CALL %s%s\n", d.getLabel(target), comment))
+			pc += 2
+		case codegen.OpRET:
+			sb.WriteString(fmt.Sprintf("    RET%s\n", c1Str))
+			pc++
+		default:
+			// Raw data word (e.g. variable initializers)
+			sb.WriteString(fmt.Sprintf("    DATA %d%s\n", cmd, c1Str))
+			pc++
+		}
+	}
+
+	return sb.String(), nil
+}
+
+func (d *Decompiler) combineComments(c1, c2 string) string {
+	c1 = strings.TrimSpace(c1)
+	c2 = strings.TrimSpace(c2)
+	if c1 != "" && c2 != "" {
+		if strings.EqualFold(c1, c2) {
+			return "  ; " + c1
+		}
+		return "  ; " + c1 + " | " + c2
+	}
+	if c1 != "" {
+		return "  ; " + c1
+	}
+	if c2 != "" {
+		return "  ; " + c2
+	}
+	return ""
+}
+
+// Decompile decompiles machine code memory into high-level Clack-BASIC code (.bas)
 func (d *Decompiler) Decompile() (string, error) {
 	// 1. Disassemble instruction stream
 	var instructions []Instruction
@@ -129,7 +485,7 @@ func (d *Decompiler) Decompile() (string, error) {
 		}
 
 		cmd := d.memory[pc]
-		inst := Instruction{PC: pc, Opcode: cmd}
+		inst := Instruction{PC: pc, Opcode: cmd, Comment: d.comments[pc]}
 
 		switch cmd {
 		case codegen.OpNOP:

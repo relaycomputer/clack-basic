@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Version = "1.4.0"
+	Version = "1.5.0"
 )
 
 type CmdOptions struct {
@@ -94,6 +94,8 @@ func main() {
 		handleCompile(os.Args[2:])
 	case "asm", "assemble", "a":
 		handleAssemble(os.Args[2:])
+	case "disasm", "disassemble", "dasm":
+		handleDisasm(os.Args[2:])
 	case "decompile", "decomp", "d":
 		handleDecompile(os.Args[2:])
 	case "flash", "upload", "run":
@@ -104,10 +106,12 @@ func main() {
 		printBanner()
 		printUsage()
 	default:
-		if strings.HasSuffix(cmd, ".bas") || strings.HasSuffix(cmd, ".txt") {
+		if strings.HasSuffix(cmd, ".bas") {
 			handleCompile(os.Args[1:])
 		} else if strings.HasSuffix(cmd, ".asm") {
 			handleAssemble(os.Args[1:])
+		} else if strings.HasSuffix(cmd, ".txt") || strings.HasSuffix(cmd, ".c") || strings.HasSuffix(cmd, ".ino") {
+			handleDisasm(os.Args[1:])
 		} else {
 			fmt.Printf("Unbekannter Befehl: '%s'\n\n", cmd)
 			printUsage()
@@ -316,6 +320,52 @@ func handleDecompile(args []string) {
 	fmt.Printf("[+] BASIC-Quellcode geschrieben nach: %s\n", outFile)
 }
 
+func handleDisasm(args []string) {
+	opts := parseOptions(args)
+	if opts.InputFile == "" {
+		fmt.Println("[!] FEHLER: Keine Maschinencode- oder Array-Datei angegeben.")
+		fmt.Println("    Verwendung: clack disasm <datei.txt|datei.c|datei.ino> [-o output.asm]")
+		os.Exit(1)
+	}
+
+	content, err := os.ReadFile(opts.InputFile)
+	if err != nil {
+		fmt.Printf("[!] FEHLER beim Lesen von '%s': %v\n", opts.InputFile, err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("[*] Disassembliere '%s' nach 16-Bit Assembler...\n", opts.InputFile)
+	startTime := time.Now()
+
+	decomp := decompiler.NewDecompiler()
+	err = decomp.LoadSource(string(content))
+	if err != nil {
+		fmt.Printf("[!] FEHLER beim Parsen der Maschinencode-/Array-Datei:\n%v\n", err)
+		os.Exit(1)
+	}
+
+	asmCode, err := decomp.DisassembleToASM()
+	if err != nil {
+		fmt.Printf("[!] DISASSEMBLER-FEHLER: %v\n", err)
+		os.Exit(1)
+	}
+
+	outFile := opts.OutputFile
+	if outFile == "" {
+		base := strings.TrimSuffix(opts.InputFile, filepath.Ext(opts.InputFile))
+		outFile = base + ".asm"
+	}
+
+	if err := os.WriteFile(outFile, []byte(asmCode), 0644); err != nil {
+		fmt.Printf("[!] FEHLER beim Schreiben nach '%s': %v\n", outFile, err)
+		os.Exit(1)
+	}
+
+	elapsed := time.Since(startTime)
+	fmt.Printf("[+] ERFOLG: In %.2f ms nach Assembler disassembliert!\n", float64(elapsed.Microseconds())/1000.0)
+	fmt.Printf("[+] Assembler-Quellcode geschrieben nach: %s\n", outFile)
+}
+
 func handleFlash(args []string) {
 	opts := parseOptions(args)
 	if opts.InputFile == "" {
@@ -467,7 +517,8 @@ func printUsage() {
 	fmt.Println("Verwendung:")
 	fmt.Println("  clack compile <datei.bas> [Optionen]    Kompiliert BASIC-Code in Maschinencode")
 	fmt.Println("  clack asm <datei.asm> [Optionen]        Assembliert Assembler-Code in Maschinencode")
-	fmt.Println("  clack decompile <datei.txt|asm> [-o ...]  Dekompiliert Maschinencode/ASM nach BASIC")
+	fmt.Println("  clack disasm <datei.txt|c|ino> [-o ...]  Disassembliert Maschinencode/C-Array nach Assembler")
+	fmt.Println("  clack decompile <datei.txt|asm> [-o ...]  Dekompiliert Maschinencode/Array/ASM nach BASIC")
 	fmt.Println("  clack flash <datei> [Optionen]          Flasht BASIC, ASM oder Maschinencode auf Arduino")
 	fmt.Println()
 	fmt.Println("Optionen:")
@@ -479,6 +530,7 @@ func printUsage() {
 	fmt.Println("Beispiele:")
 	fmt.Println("  clack compile examples/ping_pong.bas -o ping_pong.txt")
 	fmt.Println("  clack asm examples/collatz.asm -o collatz.txt")
+	fmt.Println("  clack disasm examples/dijkstra.txt -o dijkstra.asm")
 	fmt.Println("  clack decompile dijkstra.txt -o dijkstra.bas")
 	fmt.Println("  clack flash examples/ping_pong.bas -m")
 }
