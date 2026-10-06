@@ -37,10 +37,13 @@ const (
 	TOKEN_POKE    // POKE Adresse, Wert
 	TOKEN_IN      // IN(Port)
 	TOKEN_OUT     // OUT Port, Wert
-	TOKEN_CLS     // CLS (Display / Matrix löschen)
-	TOKEN_PSET    // PSET X, Y, Color (Pixel auf Matrix setzen)
-	TOKEN_PRINT   // PRINT "Wert=", X
-	TOKEN_END     // END / STOP
+	TOKEN_CLS       // CLS (Display / Matrix löschen)
+	TOKEN_PSET      // PSET X, Y, Color (Pixel auf Matrix setzen)
+	TOKEN_PLOT      // PLOT X, Y, Color
+	TOKEN_PIXELMOVE // PIXELMOVE X, Y TO/BY ...
+	TOKEN_BY        // BY (relative Verschiebung)
+	TOKEN_PRINT     // PRINT "Wert=", X
+	TOKEN_END       // END / STOP
 	TOKEN_HALT    // HALT
 
 	// Arithmetische Operatoren

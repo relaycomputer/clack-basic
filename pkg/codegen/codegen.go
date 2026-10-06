@@ -259,6 +259,74 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_pset"})
 		return nil
 
+	case *ast.PixelMoveStmt:
+		g.needPset = true
+		xReg := g.getOrCreateVar("__pset_x")
+		yReg := g.getOrCreateVar("__pset_y")
+		cReg := g.getOrCreateVar("__pset_c")
+		newXTemp := g.allocTemp()
+		newYTemp := g.allocTemp()
+
+		// 1. Berechne neue Zielkoordinaten
+		if s.IsRelative {
+			if err := g.compileExpr(&ast.BinaryExpr{Left: s.FromX, Op: "+", Right: s.ToX}); err != nil {
+				return err
+			}
+			g.emit(OpSTAM, newXTemp, "PIXELMOVE newX (relative)")
+
+			if err := g.compileExpr(&ast.BinaryExpr{Left: s.FromY, Op: "+", Right: s.ToY}); err != nil {
+				return err
+			}
+			g.emit(OpSTAM, newYTemp, "PIXELMOVE newY (relative)")
+		} else {
+			if err := g.compileExpr(s.ToX); err != nil {
+				return err
+			}
+			g.emit(OpSTAM, newXTemp, "PIXELMOVE newX (absolute)")
+
+			if err := g.compileExpr(s.ToY); err != nil {
+				return err
+			}
+			g.emit(OpSTAM, newYTemp, "PIXELMOVE newY (absolute)")
+		}
+
+		// 2. Alten Pixel loeschen (Color = 0)
+		if err := g.compileExpr(s.FromX); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, xReg, "PIXELMOVE oldX")
+
+		if err := g.compileExpr(s.FromY); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, yReg, "PIXELMOVE oldY")
+
+		g.emit(OpLDA, 0, "PIXELMOVE Color=0 (Erase)")
+		g.emit(OpSTAM, cReg, "PSET Color 0")
+		g.emit(OpCALL, 0, "CALL __pset (Erase Old Pixel)")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_pset"})
+
+		// 3. Neuen Pixel setzen
+		g.emit(OpLDAM, newXTemp, "Lade newX")
+		g.emit(OpSTAM, xReg, "PSET newX")
+		if v, ok := s.FromX.(*ast.VariableExpr); ok && s.IsRelative {
+			g.emit(OpSTAM, g.getOrCreateVar(v.Name), "Update Var X")
+		}
+
+		g.emit(OpLDAM, newYTemp, "Lade newY")
+		g.emit(OpSTAM, yReg, "PSET newY")
+		if v, ok := s.FromY.(*ast.VariableExpr); ok && s.IsRelative {
+			g.emit(OpSTAM, g.getOrCreateVar(v.Name), "Update Var Y")
+		}
+
+		if err := g.compileExpr(s.Color); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, cReg, "PSET newColor")
+		g.emit(OpCALL, 0, "CALL __pset (Draw New Pixel)")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_pset"})
+		return nil
+
 	case *ast.EndStmt:
 		haltPC := g.pc
 		g.emit(OpBA, haltPC, "END / HALT")

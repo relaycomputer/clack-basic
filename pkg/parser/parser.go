@@ -177,8 +177,10 @@ func (p *Parser) parseStatement() ast.Stmt {
 		return p.parseOutStatement()
 	case lexer.TOKEN_CLS:
 		return p.parseClsStatement()
-	case lexer.TOKEN_PSET:
+	case lexer.TOKEN_PSET, lexer.TOKEN_PLOT:
 		return p.parsePsetStatement()
+	case lexer.TOKEN_PIXELMOVE:
+		return p.parsePixelMoveStatement()
 	case lexer.TOKEN_PRINT:
 		return p.parsePrintStatement()
 	case lexer.TOKEN_END, lexer.TOKEN_HALT:
@@ -540,11 +542,11 @@ func (p *Parser) parseClsStatement() ast.Stmt {
 
 func (p *Parser) parsePsetStatement() ast.Stmt {
 	line := p.curTok.Line
-	p.nextToken() // PSET überspringen
+	p.nextToken() // PSET oder PLOT überspringen
 
 	x := p.parseExpression(PREC_LOWEST)
 	if p.curTok.Type != lexer.TOKEN_COMMA {
-		p.addError("',' nach X-Koordinate in PSET erwartet")
+		p.addError("',' nach X-Koordinate in PSET/PLOT erwartet")
 		return nil
 	}
 	p.nextToken()
@@ -557,6 +559,56 @@ func (p *Parser) parsePsetStatement() ast.Stmt {
 	}
 
 	return &ast.PsetStmt{X: x, Y: y, Color: color, Line: line}
+}
+
+func (p *Parser) parsePixelMoveStatement() ast.Stmt {
+	line := p.curTok.Line
+	p.nextToken() // PIXELMOVE überspringen
+
+	fromX := p.parseExpression(PREC_LOWEST)
+	if p.curTok.Type != lexer.TOKEN_COMMA {
+		p.addError("',' nach Start-X in PIXELMOVE erwartet")
+		return nil
+	}
+	p.nextToken()
+	fromY := p.parseExpression(PREC_LOWEST)
+
+	isRelative := false
+	if p.curTok.Type == lexer.TOKEN_TO {
+		p.nextToken()
+	} else if p.curTok.Type == lexer.TOKEN_BY {
+		isRelative = true
+		p.nextToken()
+	} else if p.curTok.Type == lexer.TOKEN_COMMA {
+		p.nextToken()
+	} else {
+		p.addError("'TO' oder 'BY' in PIXELMOVE erwartet")
+		return nil
+	}
+
+	toX := p.parseExpression(PREC_LOWEST)
+	if p.curTok.Type != lexer.TOKEN_COMMA {
+		p.addError("',' nach Ziel-X / Delta-X in PIXELMOVE erwartet")
+		return nil
+	}
+	p.nextToken()
+	toY := p.parseExpression(PREC_LOWEST)
+
+	var color ast.Expr = &ast.NumberLiteral{Value: 1, Line: line}
+	if p.curTok.Type == lexer.TOKEN_COMMA {
+		p.nextToken()
+		color = p.parseExpression(PREC_LOWEST)
+	}
+
+	return &ast.PixelMoveStmt{
+		FromX:      fromX,
+		FromY:      fromY,
+		ToX:        toX,
+		ToY:        toY,
+		IsRelative: isRelative,
+		Color:      color,
+		Line:       line,
+	}
 }
 
 func (p *Parser) parsePrintStatement() ast.Stmt {

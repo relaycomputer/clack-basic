@@ -227,16 +227,30 @@ type ClsStmt struct {
 func (c *ClsStmt) Pos() int  { return c.Line }
 func (c *ClsStmt) stmtNode() {}
 
-// PsetStmt: Setzt Pixel auf LED-Matrix -> PSET X, Y, Color
+// PsetStmt: Setzt Pixel auf LED-Matrix -> PSET / PLOT X, Y, Color
 type PsetStmt struct {
 	X     Expr
 	Y     Expr
-	Color Expr // 1 = an, 0 = aus
+	Color Expr // 1 = an, 0 = aus / Farbindex
 	Line  int
 }
 
 func (p *PsetStmt) Pos() int  { return p.Line }
 func (p *PsetStmt) stmtNode() {}
+
+// PixelMoveStmt: Verschiebt Pixel atomar (Löschen alt + Setzen neu) -> PIXELMOVE X1, Y1 TO/BY X2, Y2 [, Color]
+type PixelMoveStmt struct {
+	FromX      Expr
+	FromY      Expr
+	ToX        Expr
+	ToY        Expr
+	IsRelative bool
+	Color      Expr
+	Line       int
+}
+
+func (p *PixelMoveStmt) Pos() int  { return p.Line }
+func (p *PixelMoveStmt) stmtNode() {}
 
 // PrintStmt: Ausgabe (für Monitor/Display) -> PRINT "Text", Variable
 type PrintStmt struct {
