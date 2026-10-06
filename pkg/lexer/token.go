@@ -40,6 +40,7 @@ const (
 	TOKEN_CLS       // CLS (Display / Matrix löschen)
 	TOKEN_PSET      // PSET X, Y, Color (Pixel auf Matrix setzen)
 	TOKEN_PLOT      // PLOT X, Y, Color
+	TOKEN_LINE      // LINE X1, Y1 TO X2, Y2 [, Color]
 	TOKEN_PIXELMOVE // PIXELMOVE X, Y TO/BY ...
 	TOKEN_BY        // BY (relative Verschiebung)
 	TOKEN_PRINT     // PRINT "Wert=", X

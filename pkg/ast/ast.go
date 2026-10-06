@@ -252,6 +252,19 @@ type PixelMoveStmt struct {
 func (p *PixelMoveStmt) Pos() int  { return p.Line }
 func (p *PixelMoveStmt) stmtNode() {}
 
+// LineStmt: Zeichnet Linie von (X1, Y1) nach (X2, Y2) via Bresenham -> LINE X1, Y1 TO X2, Y2 [, Color]
+type LineStmt struct {
+	X1    Expr
+	Y1    Expr
+	X2    Expr
+	Y2    Expr
+	Color Expr
+	Line  int
+}
+
+func (l *LineStmt) Pos() int  { return l.Line }
+func (l *LineStmt) stmtNode() {}
+
 // PrintStmt: Ausgabe (für Monitor/Display) -> PRINT "Text", Variable
 type PrintStmt struct {
 	Items []Expr // String- oder Num-Expressions

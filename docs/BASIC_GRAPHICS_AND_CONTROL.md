@@ -66,6 +66,29 @@ PIXELMOVE X, Y BY DX, DY [, Color]
 
 ---
 
+### `LINE X1, Y1 TO X2, Y2 [, Color]` — Linien zeichnen (Bresenham-Algorithmus)
+Zeichnet eine mathematisch exakte, gerasterte Linie zwischen zwei beliebigen Koordinaten $(X_1, Y_1)$ und $(X_2, Y_2)$.
+- Unterstützt alle 8 Oktanten, horizontale, vertikale und diagonale Linien sowie Rückwärtsrichtungen.
+- Verwendet den **Ganzzahl-Bresenham-Algorithmus** ohne Divisionen oder Fließkommazahlen – optimiert für die 16-Bit Relais-ALU!
+- Optionaler Farbparameter: `1` (Standard = Weiß/Leuchtend), `0` (Linie wegradieren), `2..15` (RGB-Palettenfarbe).
+
+```basic
+' Horizontale und vertikale Linien (z. B. Rahmen / Box)
+LINE 0, 0 TO 31, 0, 1
+LINE 31, 0 TO 31, 31, 1
+LINE 31, 31 TO 0, 31, 1
+LINE 0, 31 TO 0, 0, 1
+
+' Diagonale Linien (Kreuz / Vektorgrafik)
+LINE 0, 0 TO 31, 31, 1
+LINE 0, 31 TO 31, 0, 1
+
+' Linie löschen (Color = 0)
+LINE 5, 5 TO 25, 25, 0
+```
+
+---
+
 ## 🔁 2. Unterprogramme: `GOSUB` und `RETURN`
 
 **Ja, `GOSUB` und `RETURN` werden zu 100 % in Hardware unterstützt!**
@@ -160,7 +183,8 @@ UPDATE_PHYSICS:
 | :--- | :--- | :---: | :--- |
 | **`PLOT`** | `PLOT X, Y [, C]` | `CALL __pset` | Punkt auf Matrix setzen / löschen ($C=1$ an, $C=0$ aus) |
 | **`PSET`** | `PSET X, Y, C` | `CALL __pset` | Alias zu PLOT mit expliziter Farbangabe |
-| **`PIXELMOVE`** | `PIXELMOVE X1, Y1 TO X2, Y2` | $2	imes$ `CALL __pset` | Punkt von $(X_1, Y_1)$ nach $(X_2, Y_2)$ flimmerfrei bewegen |
+| **`LINE`** | `LINE X1, Y1 TO X2, Y2 [, C]` | `CALL __line` | Bresenham Linien-Algorithmus (beliebige Winkel) |
+| **`PIXELMOVE`** | `PIXELMOVE X1, Y1 TO X2, Y2` | $2\times$ `CALL __pset` | Punkt von $(X_1, Y_1)$ nach $(X_2, Y_2)$ flimmerfrei bewegen |
 | **`CLS`** | `CLS [StartRow, EndRow]` | `CALL __cls` | Löscht den Framebuffer im RAM |
 | **`GOSUB`** | `GOSUB Label` / `GOSUB 500` | `CALL target` (`0x5000`) | Unterprogrammaufruf (Stack Push) |
 | **`RETURN`** | `RETURN` | `RET` (`0x6000`) | Rücksprung aus Unterprogramm (Stack Pop) |

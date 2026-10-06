@@ -179,6 +179,8 @@ func (p *Parser) parseStatement() ast.Stmt {
 		return p.parseClsStatement()
 	case lexer.TOKEN_PSET, lexer.TOKEN_PLOT:
 		return p.parsePsetStatement()
+	case lexer.TOKEN_LINE:
+		return p.parseLineStatement()
 	case lexer.TOKEN_PIXELMOVE:
 		return p.parsePixelMoveStatement()
 	case lexer.TOKEN_PRINT:
@@ -608,6 +610,49 @@ func (p *Parser) parsePixelMoveStatement() ast.Stmt {
 		IsRelative: isRelative,
 		Color:      color,
 		Line:       line,
+	}
+}
+
+func (p *Parser) parseLineStatement() ast.Stmt {
+	line := p.curTok.Line
+	p.nextToken() // LINE überspringen
+
+	x1 := p.parseExpression(PREC_LOWEST)
+	if p.curTok.Type != lexer.TOKEN_COMMA {
+		p.addError("',' nach X1 in LINE erwartet")
+		return nil
+	}
+	p.nextToken()
+	y1 := p.parseExpression(PREC_LOWEST)
+
+	if p.curTok.Type == lexer.TOKEN_TO || p.curTok.Type == lexer.TOKEN_COMMA {
+		p.nextToken()
+	} else {
+		p.addError("'TO' oder ',' in LINE erwartet")
+		return nil
+	}
+
+	x2 := p.parseExpression(PREC_LOWEST)
+	if p.curTok.Type != lexer.TOKEN_COMMA {
+		p.addError("',' nach X2 in LINE erwartet")
+		return nil
+	}
+	p.nextToken()
+	y2 := p.parseExpression(PREC_LOWEST)
+
+	var color ast.Expr = &ast.NumberLiteral{Value: 1, Line: line}
+	if p.curTok.Type == lexer.TOKEN_COMMA {
+		p.nextToken()
+		color = p.parseExpression(PREC_LOWEST)
+	}
+
+	return &ast.LineStmt{
+		X1:    x1,
+		Y1:    y1,
+		X2:    x2,
+		Y2:    y2,
+		Color: color,
+		Line:  line,
 	}
 }
 

@@ -1,4 +1,4 @@
-# ⚡ Clack-BASIC & Disassembler Suite (v1.5.0)
+# ⚡ Clack-BASIC & Disassembler Suite (v1.5.2)
 **16-Bit Relaisrechner Cross-Compiler, Disassembler & Decompiler CLI**
 
 Ein moderner, hochperformanter **BASIC Cross-Compiler, Assembler und Disassembler in Go**, der höheren BASIC-Quellcode in optimierten 16-Bit Maschinencode für den mechanischen Relais-Computer übersetzt sowie rohe C-Arrays und Maschinencode in sauberen Assembler und BASIC dekompiliert.
@@ -16,7 +16,7 @@ flowchart TD
         AST --> CODEGEN["Code Generator & Symbol Table"]
     end
     
-    subgraph Decompiler["Disassembler & Decompiler (Neu in v1.5.0)"]
+    subgraph Decompiler["Disassembler & Decompiler"]
         CARRAY["C-Array (*.c / *.ino / daten[n]=...;)"] --> DEASM["Disassembler Engine"]
         VHDL["VHDL ROM / Memory Dump"] --> DEASM
         DEASM --> ASM_OUT["Relais-Assembler (*.asm) mit Labels"]
@@ -28,6 +28,7 @@ flowchart TD
         DIV["__div (16-Bit Restoring Division)"]
         CLS["__cls (Matrix Framebuffer Clear)"]
         PSET["__pset (Pixel & Bit-Addressing)"]
+        LINE["__line (Bresenham Integer Line)"]
     end
     
     CODEGEN <--> Runtime
@@ -86,7 +87,12 @@ clack flash program.txt -p /dev/ttyACM0
 * **Kontrollstrukturen:** `IF..THEN..ELSE..END IF`, `FOR..TO..STEP..NEXT`, `GOTO`, `GOSUB..RETURN`
 * **Datentabellen:** `DATA 10, 20, 30`, `READ X, Y`, `RESTORE`
 * **Direkter Speicherzugriff:** `POKE addr, val`, `PEEK(addr)`
-* **Grafikausgabe:** `CLS`, `PSET X, Y, color`
+* **Grafikausgabe & Animation (LED Matrix 64×64 / 32×32):**
+  * `CLS [StartRow, EndRow]` (Display / Zeilen löschen)
+  * `PLOT X, Y [, Color]` / `PSET X, Y, Color` (Pixel punktgenau setzen / löschen)
+  * `LINE X1, Y1 TO X2, Y2 [, Color]` (Bresenham-Linien beliebiger Steigung)
+  * `PIXELMOVE X1, Y1 TO X2, Y2 [, Color]` / `PIXELMOVE X, Y BY DX, DY` (Flimmerfreie Punkt-Animation)
+  * *Ausführliche Dokumentation:* Siehe [docs/BASIC_GRAPHICS_AND_CONTROL.md](docs/BASIC_GRAPHICS_AND_CONTROL.md)
 
 ---
 

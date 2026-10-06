@@ -44,6 +44,7 @@ type CodeGenerator struct {
 	needDiv  bool
 	needCls  bool
 	needPset bool
+	needLine bool
 
 	// DATA-Tabelle
 	dataTable []int
@@ -325,6 +326,43 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 		g.emit(OpSTAM, cReg, "PSET newColor")
 		g.emit(OpCALL, 0, "CALL __pset (Draw New Pixel)")
 		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_pset"})
+		return nil
+
+	case *ast.LineStmt:
+		g.needLine = true
+		x1Reg := g.getOrCreateVar("__line_x1")
+		y1Reg := g.getOrCreateVar("__line_y1")
+		x2Reg := g.getOrCreateVar("__line_x2")
+		y2Reg := g.getOrCreateVar("__line_y2")
+		cReg := g.getOrCreateVar("__line_c")
+
+		if err := g.compileExpr(s.X1); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, x1Reg, "LINE X1")
+
+		if err := g.compileExpr(s.Y1); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, y1Reg, "LINE Y1")
+
+		if err := g.compileExpr(s.X2); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, x2Reg, "LINE X2")
+
+		if err := g.compileExpr(s.Y2); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, y2Reg, "LINE Y2")
+
+		if err := g.compileExpr(s.Color); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, cReg, "LINE Color")
+
+		g.emit(OpCALL, 0, "CALL __line")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_line"})
 		return nil
 
 	case *ast.EndStmt:
@@ -951,6 +989,291 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emit(OpSTAM, 0, "Schreibe Pixelwort in Display")
 
 		g.emitSingle(OpRET, "RETURN __pset")
+	}
+
+	// 5. Bresenham Linie zeichnen __line (LINE X1, Y1 TO X2, Y2, Color)
+	if g.needLine {
+		g.labels["__runtime_line"] = g.pc
+		x1Addr := g.getOrCreateVar("__line_x1")
+		y1Addr := g.getOrCreateVar("__line_y1")
+		x2Addr := g.getOrCreateVar("__line_x2")
+		y2Addr := g.getOrCreateVar("__line_y2")
+		cAddr := g.getOrCreateVar("__line_c")
+
+		dxAddr := g.getOrCreateVar("__line_dx")
+		dyAddr := g.getOrCreateVar("__line_dy")
+		sxAddr := g.getOrCreateVar("__line_sx")
+		syAddr := g.getOrCreateVar("__line_sy")
+		errAddr := g.getOrCreateVar("__line_err")
+		e2Addr := g.getOrCreateVar("__line_e2")
+
+		wordAddr := g.getOrCreateVar("__line_word_addr")
+		maskAddr := g.getOrCreateVar("__line_mask")
+		countAddr := g.getOrCreateVar("__line_count")
+		currWordAddr := g.getOrCreateVar("__line_curr_word")
+
+		// 1. Berechne dx und sx:
+		// Berechne x2 - x1: (~x1 + 1) + x2
+		g.emit(OpLDAM, x1Addr, "__line: Lade x1")
+		g.emit(OpNOT, 0, "~x1")
+		g.emit(OpADD, 1, "~x1 + 1")
+		patchX2 := g.pc + 5
+		g.emit(OpSTAM, patchX2, "Patch x2 Subtraktion")
+		g.emit(OpLDAM, x2Addr, "Lade x2")
+		g.emit(OpADD, 0, "x2 - x1")
+
+		// Wenn x2 - x1 < 0 (Bit 15 gesetzt) -> x1 > x2
+		g.emit(OpBN, 0, "Wenn x2 < x1 -> sx=-1")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__line_x_neg"})
+
+		// x1 <= x2: sx = 1, dx = x2 - x1
+		g.emit(OpSTAM, dxAddr, "dx = x2 - x1")
+		g.emit(OpLDA, 1, "sx = 1")
+		g.emit(OpSTAM, sxAddr, "Speichere sx")
+		g.emit(OpBA, 0, "Weiter zu Y-Berechnung")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__line_calc_y"})
+
+		// x1 > x2: sx = -1 (0xFFFF), dx = -(x2 - x1) = ~Accu + 1
+		g.labels["__line_x_neg"] = g.pc
+		g.emit(OpNOT, 0, "~(x2 - x1)")
+		g.emit(OpADD, 1, "dx = abs(x2 - x1)")
+		g.emit(OpSTAM, dxAddr, "Speichere dx")
+		g.emit(OpLDA, 0xFFFF, "sx = -1")
+		g.emit(OpSTAM, sxAddr, "Speichere sx")
+
+		// 2. Berechne dy und sy:
+		g.labels["__line_calc_y"] = g.pc
+		// Berechne y2 - y1: (~y1 + 1) + y2
+		g.emit(OpLDAM, y1Addr, "Lade y1")
+		g.emit(OpNOT, 0, "~y1")
+		g.emit(OpADD, 1, "~y1 + 1")
+		patchY2 := g.pc + 5
+		g.emit(OpSTAM, patchY2, "Patch y2 Subtraktion")
+		g.emit(OpLDAM, y2Addr, "Lade y2")
+		g.emit(OpADD, 0, "y2 - y1")
+
+		// Wenn y2 - y1 < 0 -> y1 > y2
+		g.emit(OpBN, 0, "Wenn y2 < y1 -> sy=-1")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__line_y_neg"})
+
+		// y1 <= y2: sy = 1, dy = -(y2 - y1)
+		g.emit(OpNOT, 0, "~(y2 - y1)")
+		g.emit(OpADD, 1, "dy = -abs(y2 - y1)")
+		g.emit(OpSTAM, dyAddr, "Speichere dy")
+		g.emit(OpLDA, 1, "sy = 1")
+		g.emit(OpSTAM, syAddr, "Speichere sy")
+		g.emit(OpBA, 0, "Weiter zu err-Berechnung")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__line_calc_err"})
+
+		// y1 > y2: sy = -1 (0xFFFF), dy = y2 - y1 (bereits negativ)
+		g.labels["__line_y_neg"] = g.pc
+		g.emit(OpSTAM, dyAddr, "dy = y2 - y1 (negativ)")
+		g.emit(OpLDA, 0xFFFF, "sy = -1")
+		g.emit(OpSTAM, syAddr, "Speichere sy")
+
+		// 3. Berechne err = dx + dy
+		g.labels["__line_calc_err"] = g.pc
+		g.emit(OpLDAM, dyAddr, "Lade dy")
+		patchDy := g.pc + 5
+		g.emit(OpSTAM, patchDy, "Patch dy Addition")
+		g.emit(OpLDAM, dxAddr, "Lade dx")
+		g.emit(OpADD, 0, "dx + dy")
+		g.emit(OpSTAM, errAddr, "err = dx + dy")
+
+		// 4. Bresenham Hauptschleife
+		lineLoopPC := g.pc
+		g.labels["__line_loop"] = lineLoopPC
+
+		// 4a. Punkt (x1, y1) zeichnen
+		// wordAddr = DisplayBase + (y1 * 2) + (x1 / 16)
+		g.emit(OpLDAM, y1Addr, "Lade y1")
+		g.emit(OpSHL, 0, "y1 * 2")
+		g.emit(OpADD, DisplayBase, "DisplayBase + y1*2")
+		g.emit(OpSTAM, wordAddr, "Speichere wordAddr")
+
+		// Offset für x1 / 16
+		g.emit(OpLDAM, x1Addr, "Lade x1")
+		g.emit(OpSHR, 0, "x1 >> 1")
+		g.emit(OpSHR, 0, "x1 >> 2")
+		g.emit(OpSHR, 0, "x1 >> 3")
+		g.emit(OpSHR, 0, "x1 >> 4")
+		patchLineX := g.pc + 5
+		g.emit(OpSTAM, patchLineX, "Patch X Offset")
+		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
+		g.emit(OpADD, 0, "wordAddr + (x1 / 16)")
+		g.emit(OpSTAM, wordAddr, "Final wordAddr")
+
+		// Bitmaske = 0x8000 >> (x1 & 15)
+		g.emit(OpLDA, 0x8000, "Init Maske = 0x8000")
+		g.emit(OpSTAM, maskAddr, "Speichere Startmaske")
+		g.emit(OpLDAM, x1Addr, "Lade x1")
+		g.emit(OpAND, 0x000F, "x1 & 15")
+		g.emit(OpSTAM, countAddr, "Speichere Shift-Count")
+
+		maskLoopPC := g.pc
+		lineMaskLoopLabel := fmt.Sprintf("__line_mask_loop_%d", maskLoopPC)
+		lineMaskReadyLabel := fmt.Sprintf("__line_mask_ready_%d", maskLoopPC)
+		g.labels[lineMaskLoopLabel] = maskLoopPC
+
+		g.emit(OpLDAM, countAddr, "Lade Shift-Count")
+		g.emit(OpBZ, 0, "Fertig wenn Count == 0")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: lineMaskReadyLabel})
+		g.emit(OpADD, 0xFFFF, "Count - 1")
+		g.emit(OpSTAM, countAddr, "Speichere Count")
+		g.emit(OpLDAM, maskAddr, "Lade Maske")
+		g.emit(OpSHR, 0, "Maske >> 1")
+		g.emit(OpSTAM, maskAddr, "Speichere Maske")
+		g.emit(OpBA, maskLoopPC, "Loop Mask-Shift")
+
+		g.labels[lineMaskReadyLabel] = g.pc
+
+		// Lese aktuellen Wert an wordAddr
+		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
+		patchLineRead := g.pc + 3
+		g.emit(OpSTAM, patchLineRead, "Patch Leseadresse")
+		g.emit(OpLDAM, 0, "Lade aktuellen Wortwert")
+		g.emit(OpSTAM, currWordAddr, "Speichere currWord")
+
+		// Color prüfen
+		lineClearLabel := fmt.Sprintf("__line_clear_%d", g.pc)
+		lineWriteLabel := fmt.Sprintf("__line_write_%d", g.pc)
+
+		g.emit(OpLDAM, cAddr, "Lade Color")
+		g.emit(OpBZ, 0, "Wenn Color == 0 -> Clear Pixel")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: lineClearLabel})
+
+		// SET: currWord | mask
+		g.emit(OpLDAM, maskAddr, "Lade Maske")
+		patchLineOr := g.pc + 5
+		g.emit(OpSTAM, patchLineOr, "Patch OR-Operand")
+		g.emit(OpLDAM, currWordAddr, "Lade currWord")
+		g.emit(OpOR, 0, "currWord | mask")
+		g.emit(OpSTAM, currWordAddr, "Speichere neues currWord")
+		g.emit(OpBA, 0, "Sprung zu Write")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: lineWriteLabel})
+
+		// CLEAR: currWord & ~mask
+		g.labels[lineClearLabel] = g.pc
+		g.emit(OpLDAM, maskAddr, "Lade Maske")
+		g.emit(OpNOT, 0, "~mask")
+		patchLineAnd := g.pc + 5
+		g.emit(OpSTAM, patchLineAnd, "Patch AND-Operand")
+		g.emit(OpLDAM, currWordAddr, "Lade currWord")
+		g.emit(OpAND, 0, "currWord & ~mask")
+		g.emit(OpSTAM, currWordAddr, "Speichere neues currWord")
+
+		// Write back
+		g.labels[lineWriteLabel] = g.pc
+		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
+		patchLineWrite := g.pc + 5
+		g.emit(OpSTAM, patchLineWrite, "Patch Schreibadresse")
+		g.emit(OpLDAM, currWordAddr, "Lade geändertes Wort")
+		g.emit(OpSTAM, 0, "Schreibe Pixelwort in Display")
+
+		// 4b. Prüfe ob Ziel (x1 == x2 && y1 == y2) erreicht ist
+		lineStepLabel := fmt.Sprintf("__line_step_%d", g.pc)
+
+		// Prüfe x1 == x2: Berechne x1 - x2: (~x2 + 1) + x1
+		g.emit(OpLDAM, x2Addr, "Prüfe x1 == x2")
+		g.emit(OpNOT, 0, "~x2")
+		g.emit(OpADD, 1, "~x2 + 1")
+		patchEqX := g.pc + 5
+		g.emit(OpSTAM, patchEqX, "Patch x1 Vergleich")
+		g.emit(OpLDAM, x1Addr, "Lade x1")
+		g.emit(OpADD, 0, "x1 - x2")
+		lineCheckYLabel := fmt.Sprintf("__line_check_y_%d", g.pc)
+		g.emit(OpBZ, 0, "Wenn x1 == x2 -> Prüfe Y")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: lineCheckYLabel})
+		g.emit(OpBA, 0, "x1 != x2 -> Mache Schritt")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: lineStepLabel})
+
+		g.labels[lineCheckYLabel] = g.pc
+		// Prüfe y1 == y2
+		g.emit(OpLDAM, y2Addr, "Prüfe y1 == y2")
+		g.emit(OpNOT, 0, "~y2")
+		g.emit(OpADD, 1, "~y2 + 1")
+		patchEqY := g.pc + 5
+		g.emit(OpSTAM, patchEqY, "Patch y1 Vergleich")
+		g.emit(OpLDAM, y1Addr, "Lade y1")
+		g.emit(OpADD, 0, "y1 - y2")
+		g.emit(OpBZ, 0, "Wenn auch y1 == y2 -> Fertig!")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__line_done"})
+
+		// 4c. Schritt berechnen
+		g.labels[lineStepLabel] = g.pc
+		// e2 = err << 1
+		g.emit(OpLDAM, errAddr, "Lade err")
+		g.emit(OpSHL, 0, "err << 1")
+		g.emit(OpSTAM, e2Addr, "Speichere e2")
+
+		// Prüfe if e2 >= dy  (d.h. e2 - dy >= 0 => bit 15 == 0)
+		// Berechne e2 - dy: (~dy + 1) + e2
+		g.emit(OpLDAM, dyAddr, "Lade dy")
+		g.emit(OpNOT, 0, "~dy")
+		g.emit(OpADD, 1, "~dy + 1")
+		patchSubDy := g.pc + 5
+		g.emit(OpSTAM, patchSubDy, "Patch dy Subtraktion")
+		g.emit(OpLDAM, e2Addr, "Lade e2")
+		g.emit(OpADD, 0, "e2 - dy")
+		lineSkipXStepLabel := fmt.Sprintf("__line_skip_x_%d", g.pc)
+		g.emit(OpBN, 0, "Wenn e2 < dy -> Skip X-Step")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: lineSkipXStepLabel})
+
+		// err = err + dy
+		g.emit(OpLDAM, dyAddr, "Lade dy")
+		patchAddDy := g.pc + 5
+		g.emit(OpSTAM, patchAddDy, "Patch dy Addition")
+		g.emit(OpLDAM, errAddr, "Lade err")
+		g.emit(OpADD, 0, "err + dy")
+		g.emit(OpSTAM, errAddr, "Aktualisiere err")
+
+		// x1 = x1 + sx
+		g.emit(OpLDAM, sxAddr, "Lade sx")
+		patchAddSx := g.pc + 5
+		g.emit(OpSTAM, patchAddSx, "Patch sx Addition")
+		g.emit(OpLDAM, x1Addr, "Lade x1")
+		g.emit(OpADD, 0, "x1 + sx")
+		g.emit(OpSTAM, x1Addr, "Aktualisiere x1")
+
+		g.labels[lineSkipXStepLabel] = g.pc
+
+		// Prüfe if e2 <= dx (d.h. dx - e2 >= 0 => bit 15 == 0)
+		// Berechne dx - e2: (~e2 + 1) + dx
+		g.emit(OpLDAM, e2Addr, "Lade e2")
+		g.emit(OpNOT, 0, "~e2")
+		g.emit(OpADD, 1, "~e2 + 1")
+		patchSubE2 := g.pc + 5
+		g.emit(OpSTAM, patchSubE2, "Patch e2 Subtraktion")
+		g.emit(OpLDAM, dxAddr, "Lade dx")
+		g.emit(OpADD, 0, "dx - e2")
+		lineSkipYStepLabel := fmt.Sprintf("__line_skip_y_%d", g.pc)
+		g.emit(OpBN, 0, "Wenn e2 > dx -> Skip Y-Step")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: lineSkipYStepLabel})
+
+		// err = err + dx
+		g.emit(OpLDAM, dxAddr, "Lade dx")
+		patchAddDx := g.pc + 5
+		g.emit(OpSTAM, patchAddDx, "Patch dx Addition")
+		g.emit(OpLDAM, errAddr, "Lade err")
+		g.emit(OpADD, 0, "err + dx")
+		g.emit(OpSTAM, errAddr, "Aktualisiere err")
+
+		// y1 = y1 + sy
+		g.emit(OpLDAM, syAddr, "Lade sy")
+		patchAddSy := g.pc + 5
+		g.emit(OpSTAM, patchAddSy, "Patch sy Addition")
+		g.emit(OpLDAM, y1Addr, "Lade y1")
+		g.emit(OpADD, 0, "y1 + sy")
+		g.emit(OpSTAM, y1Addr, "Aktualisiere y1")
+
+		g.labels[lineSkipYStepLabel] = g.pc
+
+		// Nächste Iteration
+		g.emit(OpBA, lineLoopPC, "Loop __line")
+
+		// Fertig
+		g.labels["__line_done"] = g.pc
+		g.emitSingle(OpRET, "RETURN __line")
 	}
 }
 
