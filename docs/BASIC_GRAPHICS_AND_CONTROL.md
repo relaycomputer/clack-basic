@@ -130,7 +130,41 @@ ZEICHNE_KREUZ:
 
 ---
 
-## 🎮 3. Vollständiges Demo-Programm: Bouncing Ball
+## 📊 3. Datentabellen: `DATA`, `READ` & `RESTORE`
+
+`DATA`, `READ` und `RESTORE` ermöglichen das Einbetten und sequenzielle Auslesen von statischen Werte- und Vektortabellen (z. B. für Sprites, Polygone, Melodien oder Koordinatenlisten).
+
+### Funktionsweise in Hardware:
+- **`DATA v1, v2, v3, ...`**: Der Compiler bündelt alle `DATA`-Werte in einer zusammenhängenden Tabelle im Speicher (`__data_table_start`).
+- **`READ Var1 [, Var2, ...]`**: Liest das nächste Wort über den Zeiger `__data_ptr` mittels indirektem Speicherzugriff **`LDAMM`** (`0x1C00`), speichert es in die Variable und inkrementiert den Zeiger automatisch.
+- **`RESTORE`**: Setzt den Lesezeiger `__data_ptr` wieder an den Anfang der `DATA`-Tabelle zurück.
+
+### Beispiel: Vektorgrafik zeichnen aus DATA-Tabelle
+```basic
+' ============================================================
+' 📐 Dreieck aus Koordinatentabelle zeichnen
+' ============================================================
+CLS
+
+' 3 Linien-Segmente: (X1, Y1) nach (X2, Y2)
+DATA 5, 5, 25, 5
+DATA 25, 5, 15, 25
+DATA 15, 25, 5, 5
+
+FOR I = 1 TO 3
+    READ X1, Y1, X2, Y2
+    LINE X1, Y1 TO X2, Y2, 1
+NEXT I
+
+' Tabelle zurücksetzen und erneut verwenden
+RESTORE
+
+END
+```
+
+---
+
+## 🎮 4. Vollständiges Demo-Programm: Bouncing Ball
 
 Dieses Programm demonstriert die Kombination aus `CLS`, `PIXELMOVE`, Schleifen und `GOSUB`:
 
@@ -190,5 +224,8 @@ UPDATE_PHYSICS:
 | **`RETURN`** | `RETURN` | `RET` (`0x6000`) | Rücksprung aus Unterprogramm (Stack Pop) |
 | **`FOR..NEXT`**| `FOR I = 1 TO 10 [STEP 2]` | Loop-Code | Zählschleife mit automatischer Register-Verwaltung |
 | **`IF..THEN`** | `IF A > B THEN ... [ELSE]` | `BN / BZ` | Verzweigung anhand der ALU-Flags ($Z, N, C, E$) |
+| **`DATA`** | `DATA 10, 20, 30` | `DATA #Val` | Tabelle statischer Konstanten im Speicher |
+| **`READ`** | `READ X, Y` | `LDAMM [__data_ptr]` | Liest nächste Werte sequenziell aus Datentabelle |
+| **`RESTORE`** | `RESTORE` | `STAM __data_ptr` | Setzt den Daten-Lesezeiger an den Anfang zurück |
 | **`POKE`** | `POKE Addr, Val` | `STAM` | Direktes Schreiben in 16-Bit RAM-Zelle |
 | **`PEEK`** | `PEEK(Addr)` | `LDAM` | Direktes Lesen aus 16-Bit RAM-Zelle |
