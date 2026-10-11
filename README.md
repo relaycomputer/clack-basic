@@ -1,4 +1,4 @@
-# ⚡ Clack-BASIC & Disassembler Suite (v1.5.2)
+# ⚡ Clack-BASIC & Disassembler Suite (v1.5.4)
 **16-Bit Relaisrechner Cross-Compiler, Disassembler & Decompiler CLI**
 
 Ein moderner, hochperformanter **BASIC Cross-Compiler, Assembler und Disassembler in Go**, der höheren BASIC-Quellcode in optimierten 16-Bit Maschinencode für den mechanischen Relais-Computer übersetzt sowie rohe C-Arrays und Maschinencode in sauberen Assembler und BASIC dekompiliert.

@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	Version = "1.5.2"
+	Version = "1.5.4"
 )
 
 type CmdOptions struct {
