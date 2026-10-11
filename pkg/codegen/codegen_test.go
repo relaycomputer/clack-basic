@@ -39,6 +39,14 @@ func TestCodeGen_GraphicsStatements(t *testing.T) {
 40 END`,
 			contains: []string{"__runtime_cls", "__runtime_line"},
 		},
+		{
+			name: "Multiplication and Division",
+			source: `10 A = 12 * 34
+20 B = 100 / 5
+30 C = B MOD 7
+40 END`,
+			contains: []string{"__runtime_mul", "__runtime_div"},
+		},
 	}
 
 	for _, tt := range tests {
