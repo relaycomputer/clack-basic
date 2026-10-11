@@ -909,23 +909,27 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		countAddr := g.getOrCreateVar("__pset_count")
 		currWordAddr := g.getOrCreateVar("__pset_curr_word")
 
-		// 1. Berechne WordAddr = DisplayBase + (Y * 2) + (X / 16)
+		// 1. Berechne WordAddr = DisplayBase + (Y * 2) + WordOffset
+		// Auf realer 32x32 Hardware:
+		// Word 0 (Offset 0) = Rechte Hälfte (X = 16..31)
+		// Word 1 (Offset 1) = Linke Hälfte  (X = 0..15)
 		g.emit(OpLDAM, yAddr, "__pset: Lade Y")
 		g.emit(OpSHL, 0, "Y * 2")
-		g.emit(OpADD, DisplayBase, "Base + Y*2")
+		g.emit(OpADD, DisplayBase+1, "Base + Y*2 + 1 (Default Word 1)")
 		g.emit(OpSTAM, wordAddr, "Speichere wordAddr")
 
-		// Offset für X/16 (wenn X >= 16)
+		// Prüfe X >= 16: Wenn X < 16 bleibt Word 1, wenn X >= 16 ziehe 1 ab -> Word 0
 		g.emit(OpLDAM, xAddr, "Lade X")
-		g.emit(OpSHR, 0, "X >> 1")
-		g.emit(OpSHR, 0, "X >> 2")
-		g.emit(OpSHR, 0, "X >> 3")
-		g.emit(OpSHR, 0, "X >> 4 (X / 16)")
-		patchX := g.pc + 5
-		g.emit(OpSTAM, patchX, "Patch X Offset")
+		g.emit(OpAND, 0x0010, "X >= 16 ?")
+		g.emit(OpBZ, 0, "Wenn X < 16 -> Word 1 bereit")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__pset_word_ready"})
+
+		// X >= 16: Ziehe 1 ab (ADD 0xFFFF) -> Word 0
 		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
-		g.emit(OpADD, 0, "wordAddr + (X / 16)")
-		g.emit(OpSTAM, wordAddr, "Final wordAddr")
+		g.emit(OpADD, 0xFFFF, "wordAddr - 1 -> Word 0")
+		g.emit(OpSTAM, wordAddr, "Speichere Word 0")
+
+		g.labels["__pset_word_ready"] = g.pc
 
 		// 2. Berechne Bitmaske = 0x8000 >> (X & 15)
 		g.emit(OpLDA, 0x8000, "Init Maske = 0x8000 (Bit 15)")
@@ -1085,23 +1089,28 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.labels["__line_loop"] = lineLoopPC
 
 		// 4a. Punkt (x1, y1) zeichnen
-		// wordAddr = DisplayBase + (y1 * 2) + (x1 / 16)
+		// wordAddr = DisplayBase + (y1 * 2) + WordOffset
+		// Auf realer 32x32 Hardware:
+		// Word 0 (Offset 0) = Rechte Hälfte (x1 = 16..31)
+		// Word 1 (Offset 1) = Linke Hälfte  (x1 = 0..15)
+		lineWordReadyLabel := fmt.Sprintf("__line_word_ready_%d", g.pc)
 		g.emit(OpLDAM, y1Addr, "Lade y1")
 		g.emit(OpSHL, 0, "y1 * 2")
-		g.emit(OpADD, DisplayBase, "DisplayBase + y1*2")
+		g.emit(OpADD, DisplayBase+1, "DisplayBase + y1*2 + 1 (Default Word 1)")
 		g.emit(OpSTAM, wordAddr, "Speichere wordAddr")
 
-		// Offset für x1 / 16
+		// Prüfe x1 >= 16: Wenn x1 < 16 bleibt Word 1, wenn x1 >= 16 ziehe 1 ab -> Word 0
 		g.emit(OpLDAM, x1Addr, "Lade x1")
-		g.emit(OpSHR, 0, "x1 >> 1")
-		g.emit(OpSHR, 0, "x1 >> 2")
-		g.emit(OpSHR, 0, "x1 >> 3")
-		g.emit(OpSHR, 0, "x1 >> 4")
-		patchLineX := g.pc + 5
-		g.emit(OpSTAM, patchLineX, "Patch X Offset")
+		g.emit(OpAND, 0x0010, "x1 >= 16 ?")
+		g.emit(OpBZ, 0, "Wenn x1 < 16 -> Word 1 bereit")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: lineWordReadyLabel})
+
+		// x1 >= 16: Ziehe 1 ab -> Word 0
 		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
-		g.emit(OpADD, 0, "wordAddr + (x1 / 16)")
-		g.emit(OpSTAM, wordAddr, "Final wordAddr")
+		g.emit(OpADD, 0xFFFF, "wordAddr - 1 -> Word 0")
+		g.emit(OpSTAM, wordAddr, "Speichere Word 0")
+
+		g.labels[lineWordReadyLabel] = g.pc
 
 		// Bitmaske = 0x8000 >> (x1 & 15)
 		g.emit(OpLDA, 0x8000, "Init Maske = 0x8000")
