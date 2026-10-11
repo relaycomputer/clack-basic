@@ -98,6 +98,16 @@ type InExpr struct {
 func (i *InExpr) Pos() int    { return i.Line }
 func (i *InExpr) exprNode()   {}
 
+// SqrExpr: Berechnet Quadratwurzel -> SQR(X) oder SQR(X, Nachkommastellen)
+type SqrExpr struct {
+	Value    Expr
+	Decimals Expr
+	Line     int
+}
+
+func (s *SqrExpr) Pos() int    { return s.Line }
+func (s *SqrExpr) exprNode()   {}
+
 // ============================================================================
 // ANWEISUNGEN (STATEMENTS)
 // ============================================================================

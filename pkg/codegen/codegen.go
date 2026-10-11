@@ -42,6 +42,7 @@ type CodeGenerator struct {
 	// Runtime-Bedarf
 	needMul  bool
 	needDiv  bool
+	needSqr  bool
 	needCls  bool
 	needPset bool
 	needLine bool
@@ -534,6 +535,26 @@ func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
 		g.emit(OpLDAM, 0, "PEEK [dynamisch]")
 		return nil
 
+	case *ast.SqrExpr:
+		g.needSqr = true
+		if err := g.compileExpr(e.Value); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, g.getOrCreateVar("__r0"), "Radikand __r0")
+
+		if e.Decimals != nil {
+			if err := g.compileExpr(e.Decimals); err != nil {
+				return err
+			}
+		} else {
+			g.emit(OpLDA, 0, "Default 0 Nachkommastellen")
+		}
+		g.emit(OpSTAM, g.getOrCreateVar("__r1"), "Nachkommastellen __r1")
+
+		g.emit(OpCALL, 0, "CALL __sqr")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_sqr"})
+		return nil
+
 	default:
 		return fmt.Errorf("Unbekannter Ausdruckstyp: %T", expr)
 	}
@@ -860,6 +881,204 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.labels["__div_done"] = g.pc
 		g.emit(OpLDAM, quotAddr, "__div: Rueckgabe Quotient")
 		g.emitSingle(OpRET, "RETURN __div")
+	}
+
+	// 2b. Quadratwurzel __sqr (SQR/SQRT Radikand __r0 mit __r1 Nachkommastellen -> Accu)
+	if g.needSqr {
+		g.labels["__runtime_sqr"] = g.pc
+		r0Addr := g.getOrCreateVar("__r0")
+		r1Addr := g.getOrCreateVar("__r1")
+		sqrR := g.getOrCreateVar("__sqr_r")
+		sqrRem := g.getOrCreateVar("__sqr_rem")
+		sqrTrial := g.getOrCreateVar("__sqr_trial")
+		sqrDec := g.getOrCreateVar("__sqr_dec")
+		sqrD := g.getOrCreateVar("__sqr_d")
+		sqrDelta := g.getOrCreateVar("__sqr_delta")
+		sqrTemp := g.getOrCreateVar("__sqr_temp")
+
+		// 1. Wenn Radikand negativ (Bit 15 == 1) -> Rueckgabe 0
+		g.emit(OpLDAM, r0Addr, "__sqr: Lade Radikand")
+		g.emit(OpBN, 0, "__sqr: Wenn negativ -> return 0")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__sqr_neg"})
+
+		// Initialisierung: R = 0, rem = Radikand
+		g.emit(OpLDA, 0, "__sqr: Init R = 0")
+		g.emit(OpSTAM, sqrR, "R = 0")
+		g.emit(OpLDAM, r0Addr, "Lade Radikand")
+		g.emit(OpSTAM, sqrRem, "rem = radikand")
+
+		// 2. 8-Schritt Bit-by-Bit Integer-Wurzel (k = 7 abwaerts bis 0)
+		// Step k = 7 (b = 128, trial = 16384, da R = 0)
+		g.emit(OpLDAM, sqrRem, "__sqr: k=7 rem - 16384")
+		g.emit(OpADD, uint16(49152), "rem + (-16384)")
+		skip7 := fmt.Sprintf("__sqr_skip_step_%d", g.pc)
+		g.emit(OpBN, 0, "__sqr: k=7 skip wenn negativ")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: skip7})
+		g.emit(OpSTAM, sqrRem, "Speichere rem")
+		g.emit(OpLDA, 128, "Setze Bit 7 in R")
+		g.emit(OpSTAM, sqrR, "R = 128")
+		g.labels[skip7] = g.pc
+
+		// Steps k = 6 abwaerts bis 0:
+		// trial = (R << (k+1)) + (1 << (2*k))
+		for k := 6; k >= 0; k-- {
+			// trial berechnen: Lade R, shift (k+1) mal links, addiere 1<<(2*k)
+			g.emit(OpLDAM, sqrR, fmt.Sprintf("__sqr: k=%d Lade R", k))
+			for s := 0; s < k+1; s++ {
+				g.emit(OpSHL, 0, "R << 1")
+			}
+			g.emit(OpADD, uint16(1<<(2*k)), fmt.Sprintf("+ %d", 1<<(2*k)))
+			g.emit(OpSTAM, sqrTrial, "Speichere trial")
+
+			// rem - trial berechnen via 2er-Komplement (~trial + 1)
+			g.emit(OpNOT, 0, "~trial")
+			g.emit(OpADD, 1, "-trial")
+			patchSub := g.pc + 5
+			g.emit(OpSTAM, patchSub, "Patch Subtrahend")
+			g.emit(OpLDAM, sqrRem, "Lade rem")
+			g.emit(OpADD, 0, "rem - trial")
+
+			skipK := fmt.Sprintf("__sqr_skip_step_%d", g.pc)
+			g.emit(OpBN, 0, fmt.Sprintf("__sqr: k=%d skip wenn negativ", k))
+			g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: skipK})
+
+			// rem = rem - trial
+			g.emit(OpSTAM, sqrRem, "Speichere neues rem")
+			// R = R + (1 << k)
+			g.emit(OpLDAM, sqrR, "Lade R")
+			g.emit(OpADD, uint16(1<<k), fmt.Sprintf("R + %d", 1<<k))
+			g.emit(OpSTAM, sqrR, "Speichere R")
+			g.labels[skipK] = g.pc
+		}
+
+		// 3. Nachkommastellen (Festkomma)
+		// Pruefe ob __r1 == 0 -> wenn ja, sofort fertig!
+		g.emit(OpLDAM, r1Addr, "__sqr: Lade Nachkommastellen D")
+		g.emit(OpBZ, 0, "__sqr: Wenn D == 0 -> Fertig")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__sqr_done"})
+		g.emit(OpSTAM, sqrDec, "Speichere Dec-Zaehler")
+
+		decLoopPC := g.pc
+		g.labels[fmt.Sprintf("__sqr_dec_loop_%d", decLoopPC)] = decLoopPC
+
+		// a) rem = rem * 100 (2x * 10)
+		for pass := 0; pass < 2; pass++ {
+			// temp = rem << 1
+			g.emit(OpLDAM, sqrRem, "Lade rem fuer * 10")
+			g.emit(OpSHL, 0, "rem << 1")
+			g.emit(OpSTAM, sqrTemp, "temp = rem * 2")
+
+			// patch upcoming ADD with temp
+			patchMul10 := g.pc + 11
+			g.emit(OpSTAM, patchMul10, "Patch ADD mit temp")
+
+			// Accu = rem << 3 (rem * 8)
+			g.emit(OpLDAM, sqrRem, "Lade rem")
+			g.emit(OpSHL, 0, "rem << 1")
+			g.emit(OpSHL, 0, "rem << 2")
+			g.emit(OpSHL, 0, "rem << 3")
+			g.emit(OpADD, 0, "rem*8 + rem*2 = rem*10")
+			g.emit(OpSTAM, sqrRem, "Speichere rem*10")
+		}
+
+		// b) delta = 20 * R + 1
+		// Berechne 10 * R:
+		g.emit(OpLDAM, sqrR, "Lade R fuer 20*R")
+		g.emit(OpSHL, 0, "R << 1")
+		g.emit(OpSTAM, sqrTemp, "temp = R * 2")
+		patchMulR := g.pc + 11
+		g.emit(OpSTAM, patchMulR, "Patch ADD mit temp")
+		g.emit(OpLDAM, sqrR, "Lade R")
+		g.emit(OpSHL, 0, "R << 1")
+		g.emit(OpSHL, 0, "R << 2")
+		g.emit(OpSHL, 0, "R << 3")
+		g.emit(OpADD, 0, "R*8 + R*2 = 10*R")
+		g.emit(OpSHL, 0, "10*R * 2 = 20*R")
+		g.emit(OpADD, 1, "20*R + 1")
+		g.emit(OpSTAM, sqrDelta, "Speichere delta = 20*R + 1")
+
+		// c) Init d = 0
+		g.emit(OpLDA, 0, "Init d = 0")
+		g.emit(OpSTAM, sqrD, "d = 0")
+
+		// d) Ziffernbestimmungs-Schleife (d_loop)
+		dLoopPC := g.pc
+		g.labels[fmt.Sprintf("__sqr_d_loop_%d", dLoopPC)] = dLoopPC
+
+		// rem - delta berechnen
+		g.emit(OpLDAM, sqrDelta, "Lade delta")
+		g.emit(OpNOT, 0, "~delta")
+		g.emit(OpADD, 1, "-delta")
+		patchDSub := g.pc + 5
+		g.emit(OpSTAM, patchDSub, "Patch delta-Subtraktion")
+		g.emit(OpLDAM, sqrRem, "Lade rem")
+		g.emit(OpADD, 0, "rem - delta")
+
+		dDoneLabel := fmt.Sprintf("__sqr_d_done_%d", g.pc)
+		g.emit(OpBN, 0, "Wenn rem < delta -> Ziffer fertig")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: dDoneLabel})
+
+		// rem = rem - delta
+		g.emit(OpSTAM, sqrRem, "rem = rem - delta")
+		// delta = delta + 2
+		g.emit(OpLDAM, sqrDelta, "Lade delta")
+		g.emit(OpADD, 2, "delta + 2")
+		g.emit(OpSTAM, sqrDelta, "Speichere delta")
+		// d = d + 1
+		g.emit(OpLDAM, sqrD, "Lade d")
+		g.emit(OpADD, 1, "d + 1")
+		g.emit(OpSTAM, sqrD, "Speichere d")
+		g.emit(OpBA, dLoopPC, "Loop d_loop")
+
+		// e) Ziffer d fertig: R = R * 10 + d
+		g.labels[dDoneLabel] = g.pc
+		g.emit(OpLDAM, sqrR, "Lade R fuer R*10")
+		g.emit(OpSHL, 0, "R << 1")
+		g.emit(OpSTAM, sqrTemp, "temp = R * 2")
+		patchNewR := g.pc + 11
+		g.emit(OpSTAM, patchNewR, "Patch ADD mit temp")
+		g.emit(OpLDAM, sqrR, "Lade R")
+		g.emit(OpSHL, 0, "R << 1")
+		g.emit(OpSHL, 0, "R << 2")
+		g.emit(OpSHL, 0, "R << 3")
+		g.emit(OpADD, 0, "R*10")
+		g.emit(OpSTAM, sqrTemp, "temp = R * 10")
+
+		// Addiere d zu R*10
+		patchAddD := g.pc + 5
+		g.emit(OpSTAM, patchAddD, "Patch ADD mit R*10")
+		g.emit(OpLDAM, sqrD, "Lade d")
+		g.emit(OpADD, 0, "R*10 + d")
+		g.emit(OpSTAM, sqrR, "Speichere neues R")
+
+		// f) Dekrementiere Dezimalstellen-Zaehler
+		g.emit(OpLDAM, sqrDec, "Lade Dec-Counter")
+		g.emit(OpADD, uint16(0xFFFF), "Dec - 1")
+		g.emit(OpSTAM, sqrDec, "Speichere Dec")
+		g.emit(OpBZ, 0, "Wenn Dec == 0 -> Fertig")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__sqr_done"})
+
+		// Overflow-Schutz fuer 16-Bit: wenn R >= 3276, keine weitere Nachkommastelle
+		g.emit(OpLDAM, sqrR, "Pruefe Overflow R >= 3276")
+		g.emit(OpADD, uint16((-3276)&0xFFFF), "R - 3276")
+		g.emit(OpBN, 0, "Wenn R < 3276 -> Naechste Stelle")
+		nextDecLabel := fmt.Sprintf("__sqr_next_dec_%d", g.pc)
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: nextDecLabel})
+		g.emit(OpBA, 0, "R >= 3276 -> Vorzeitiges Ende")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__sqr_done"})
+
+		g.labels[nextDecLabel] = g.pc
+		g.emit(OpBA, decLoopPC, "Naechste Nachkommastelle")
+
+		// g) Fertig & Rueckgabe
+		g.labels["__sqr_done"] = g.pc
+		g.emit(OpLDAM, sqrR, "__sqr: Rueckgabe Wurzel R in Accu")
+		g.emitSingle(OpRET, "RETURN __sqr")
+
+		// Negativeingabe -> 0
+		g.labels["__sqr_neg"] = g.pc
+		g.emit(OpLDA, 0, "__sqr: Negativeingabe Rueckgabe 0")
+		g.emitSingle(OpRET, "RETURN __sqr (negativ)")
 	}
 
 	// 3. Display Löschen __cls (von __cls_ptr bis __cls_end_addr)

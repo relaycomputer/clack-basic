@@ -1,0 +1,443 @@
+// ============================================================
+// ⚡ Generiert von Clack-BASIC Cross-Compiler (Arduino Loader Format)
+// ============================================================
+CLR
+
+0 0x4000 // Initialer Sprung zum Hauptprogramm
+1 0x000A // Operand #0x0000 (0)
+10 0x1400 // Konstante 64
+11 0x0040 // Operand #0x0040 (64)
+12 0x2800 // Radikand __r0
+13 0x03A3 // Operand #0x03A3 (931)
+14 0x1400 // Konstante 0
+16 0x2800 // Nachkommastellen __r1
+17 0x03A4 // Operand #0x03A4 (932)
+18 0x5000 // CALL __sqr
+19 0x0062 // Operand #0x0000 (0)
+20 0x2800 // LET R1 = Accu
+21 0x03A2 // Operand #0x03A2 (930)
+22 0x1400 // Konstante 100
+23 0x0064 // Operand #0x0064 (100)
+24 0x2800 // Radikand __r0
+25 0x03A3 // Operand #0x03A3 (931)
+26 0x1400 // Konstante 0
+28 0x2800 // Nachkommastellen __r1
+29 0x03A4 // Operand #0x03A4 (932)
+30 0x5000 // CALL __sqr
+31 0x0062 // Operand #0x0000 (0)
+32 0x2800 // LET R2 = Accu
+33 0x03A5 // Operand #0x03A5 (933)
+34 0x1400 // Konstante 25
+35 0x0019 // Operand #0x0019 (25)
+36 0x2800 // Radikand __r0
+37 0x03A3 // Operand #0x03A3 (931)
+38 0x1400 // Konstante 0
+40 0x2800 // Nachkommastellen __r1
+41 0x03A4 // Operand #0x03A4 (932)
+42 0x5000 // CALL __sqr
+43 0x0062 // Operand #0x0000 (0)
+44 0x2800 // LET R3 = Accu
+45 0x03A6 // Operand #0x03A6 (934)
+46 0x1400 // Konstante 2
+47 0x0002 // Operand #0x0002 (2)
+48 0x2800 // Radikand __r0
+49 0x03A3 // Operand #0x03A3 (931)
+50 0x1400 // Konstante 1
+51 0x0001 // Operand #0x0001 (1)
+52 0x2800 // Nachkommastellen __r1
+53 0x03A4 // Operand #0x03A4 (932)
+54 0x5000 // CALL __sqr
+55 0x0062 // Operand #0x0000 (0)
+56 0x2800 // LET W2_1 = Accu
+57 0x03A7 // Operand #0x03A7 (935)
+58 0x1400 // Konstante 2
+59 0x0002 // Operand #0x0002 (2)
+60 0x2800 // Radikand __r0
+61 0x03A3 // Operand #0x03A3 (931)
+62 0x1400 // Konstante 2
+63 0x0002 // Operand #0x0002 (2)
+64 0x2800 // Nachkommastellen __r1
+65 0x03A4 // Operand #0x03A4 (932)
+66 0x5000 // CALL __sqr
+67 0x0062 // Operand #0x0000 (0)
+68 0x2800 // LET W2_2 = Accu
+69 0x03A8 // Operand #0x03A8 (936)
+70 0x1400 // Konstante 3
+71 0x0003 // Operand #0x0003 (3)
+72 0x2800 // Radikand __r0
+73 0x03A3 // Operand #0x03A3 (931)
+74 0x1400 // Konstante 2
+75 0x0002 // Operand #0x0002 (2)
+76 0x2800 // Nachkommastellen __r1
+77 0x03A4 // Operand #0x03A4 (932)
+78 0x5000 // CALL __sqr
+79 0x0062 // Operand #0x0000 (0)
+80 0x2800 // LET W3_2 = Accu
+81 0x03A9 // Operand #0x03A9 (937)
+82 0x1400 // Konstante 10
+83 0x000A // Operand #0x000A (10)
+84 0x2800 // Radikand __r0
+85 0x03A3 // Operand #0x03A3 (931)
+86 0x1400 // Konstante 2
+87 0x0002 // Operand #0x0002 (2)
+88 0x2800 // Nachkommastellen __r1
+89 0x03A4 // Operand #0x03A4 (932)
+90 0x5000 // CALL __sqr
+91 0x0062 // Operand #0x0000 (0)
+92 0x2800 // LET W10_2 = Accu
+93 0x03AA // Operand #0x03AA (938)
+94 0x4000 // END / HALT
+95 0x005E // Operand #0x005E (94)
+96 0x4000 // Ende des Programms (Halt-Schleife)
+97 0x0060 // Operand #0x0060 (96)
+98 0x1800 // __sqr: Lade Radikand
+99 0x03A3 // Operand #0x03A3 (931)
+100 0x4010 // __sqr: Wenn negativ -> return 0
+101 0x0201 // Operand #0x0000 (0)
+102 0x1400 // __sqr: Init R = 0
+104 0x2800 // R = 0
+105 0x03AB // Operand #0x03AB (939)
+106 0x1800 // Lade Radikand
+107 0x03A3 // Operand #0x03A3 (931)
+108 0x2800 // rem = radikand
+109 0x03AC // Operand #0x03AC (940)
+110 0x1800 // __sqr: k=7 rem - 16384
+111 0x03AC // Operand #0x03AC (940)
+112 0x3440 // rem + (-16384)
+113 0xC000 // Operand #0xC000 (49152)
+114 0x4010 // __sqr: k=7 skip wenn negativ
+115 0x007A // Operand #0x0000 (0)
+116 0x2800 // Speichere rem
+117 0x03AC // Operand #0x03AC (940)
+118 0x1400 // Setze Bit 7 in R
+119 0x0080 // Operand #0x0080 (128)
+120 0x2800 // R = 128
+121 0x03AB // Operand #0x03AB (939)
+122 0x1800 // __sqr: k=6 Lade R
+123 0x03AB // Operand #0x03AB (939)
+124 0x35C0 // R << 1
+126 0x35C0 // R << 1
+128 0x35C0 // R << 1
+130 0x35C0 // R << 1
+132 0x35C0 // R << 1
+134 0x35C0 // R << 1
+136 0x35C0 // R << 1
+138 0x3440 // + 4096
+139 0x1000 // Operand #0x1000 (4096)
+140 0x2800 // Speichere trial
+141 0x03AD // Operand #0x03AD (941)
+142 0x3540 // ~trial
+144 0x3440 // -trial
+145 0x0001 // Operand #0x0001 (1)
+146 0x2800 // Patch Subtrahend
+147 0x0097 // Operand #0x0097 (151)
+148 0x1800 // Lade rem
+149 0x03AC // Operand #0x03AC (940)
+150 0x3440 // rem - trial
+152 0x4010 // __sqr: k=6 skip wenn negativ
+153 0x00A2 // Operand #0x0000 (0)
+154 0x2800 // Speichere neues rem
+155 0x03AC // Operand #0x03AC (940)
+156 0x1800 // Lade R
+157 0x03AB // Operand #0x03AB (939)
+158 0x3440 // R + 64
+159 0x0040 // Operand #0x0040 (64)
+160 0x2800 // Speichere R
+161 0x03AB // Operand #0x03AB (939)
+162 0x1800 // __sqr: k=5 Lade R
+163 0x03AB // Operand #0x03AB (939)
+164 0x35C0 // R << 1
+166 0x35C0 // R << 1
+168 0x35C0 // R << 1
+170 0x35C0 // R << 1
+172 0x35C0 // R << 1
+174 0x35C0 // R << 1
+176 0x3440 // + 1024
+177 0x0400 // Operand #0x0400 (1024)
+178 0x2800 // Speichere trial
+179 0x03AD // Operand #0x03AD (941)
+180 0x3540 // ~trial
+182 0x3440 // -trial
+183 0x0001 // Operand #0x0001 (1)
+184 0x2800 // Patch Subtrahend
+185 0x00BD // Operand #0x00BD (189)
+186 0x1800 // Lade rem
+187 0x03AC // Operand #0x03AC (940)
+188 0x3440 // rem - trial
+190 0x4010 // __sqr: k=5 skip wenn negativ
+191 0x00C8 // Operand #0x0000 (0)
+192 0x2800 // Speichere neues rem
+193 0x03AC // Operand #0x03AC (940)
+194 0x1800 // Lade R
+195 0x03AB // Operand #0x03AB (939)
+196 0x3440 // R + 32
+197 0x0020 // Operand #0x0020 (32)
+198 0x2800 // Speichere R
+199 0x03AB // Operand #0x03AB (939)
+200 0x1800 // __sqr: k=4 Lade R
+201 0x03AB // Operand #0x03AB (939)
+202 0x35C0 // R << 1
+204 0x35C0 // R << 1
+206 0x35C0 // R << 1
+208 0x35C0 // R << 1
+210 0x35C0 // R << 1
+212 0x3440 // + 256
+213 0x0100 // Operand #0x0100 (256)
+214 0x2800 // Speichere trial
+215 0x03AD // Operand #0x03AD (941)
+216 0x3540 // ~trial
+218 0x3440 // -trial
+219 0x0001 // Operand #0x0001 (1)
+220 0x2800 // Patch Subtrahend
+221 0x00E1 // Operand #0x00E1 (225)
+222 0x1800 // Lade rem
+223 0x03AC // Operand #0x03AC (940)
+224 0x3440 // rem - trial
+226 0x4010 // __sqr: k=4 skip wenn negativ
+227 0x00EC // Operand #0x0000 (0)
+228 0x2800 // Speichere neues rem
+229 0x03AC // Operand #0x03AC (940)
+230 0x1800 // Lade R
+231 0x03AB // Operand #0x03AB (939)
+232 0x3440 // R + 16
+233 0x0010 // Operand #0x0010 (16)
+234 0x2800 // Speichere R
+235 0x03AB // Operand #0x03AB (939)
+236 0x1800 // __sqr: k=3 Lade R
+237 0x03AB // Operand #0x03AB (939)
+238 0x35C0 // R << 1
+240 0x35C0 // R << 1
+242 0x35C0 // R << 1
+244 0x35C0 // R << 1
+246 0x3440 // + 64
+247 0x0040 // Operand #0x0040 (64)
+248 0x2800 // Speichere trial
+249 0x03AD // Operand #0x03AD (941)
+250 0x3540 // ~trial
+252 0x3440 // -trial
+253 0x0001 // Operand #0x0001 (1)
+254 0x2800 // Patch Subtrahend
+255 0x0103 // Operand #0x0103 (259)
+256 0x1800 // Lade rem
+257 0x03AC // Operand #0x03AC (940)
+258 0x3440 // rem - trial
+260 0x4010 // __sqr: k=3 skip wenn negativ
+261 0x010E // Operand #0x0000 (0)
+262 0x2800 // Speichere neues rem
+263 0x03AC // Operand #0x03AC (940)
+264 0x1800 // Lade R
+265 0x03AB // Operand #0x03AB (939)
+266 0x3440 // R + 8
+267 0x0008 // Operand #0x0008 (8)
+268 0x2800 // Speichere R
+269 0x03AB // Operand #0x03AB (939)
+270 0x1800 // __sqr: k=2 Lade R
+271 0x03AB // Operand #0x03AB (939)
+272 0x35C0 // R << 1
+274 0x35C0 // R << 1
+276 0x35C0 // R << 1
+278 0x3440 // + 16
+279 0x0010 // Operand #0x0010 (16)
+280 0x2800 // Speichere trial
+281 0x03AD // Operand #0x03AD (941)
+282 0x3540 // ~trial
+284 0x3440 // -trial
+285 0x0001 // Operand #0x0001 (1)
+286 0x2800 // Patch Subtrahend
+287 0x0123 // Operand #0x0123 (291)
+288 0x1800 // Lade rem
+289 0x03AC // Operand #0x03AC (940)
+290 0x3440 // rem - trial
+292 0x4010 // __sqr: k=2 skip wenn negativ
+293 0x012E // Operand #0x0000 (0)
+294 0x2800 // Speichere neues rem
+295 0x03AC // Operand #0x03AC (940)
+296 0x1800 // Lade R
+297 0x03AB // Operand #0x03AB (939)
+298 0x3440 // R + 4
+299 0x0004 // Operand #0x0004 (4)
+300 0x2800 // Speichere R
+301 0x03AB // Operand #0x03AB (939)
+302 0x1800 // __sqr: k=1 Lade R
+303 0x03AB // Operand #0x03AB (939)
+304 0x35C0 // R << 1
+306 0x35C0 // R << 1
+308 0x3440 // + 4
+309 0x0004 // Operand #0x0004 (4)
+310 0x2800 // Speichere trial
+311 0x03AD // Operand #0x03AD (941)
+312 0x3540 // ~trial
+314 0x3440 // -trial
+315 0x0001 // Operand #0x0001 (1)
+316 0x2800 // Patch Subtrahend
+317 0x0141 // Operand #0x0141 (321)
+318 0x1800 // Lade rem
+319 0x03AC // Operand #0x03AC (940)
+320 0x3440 // rem - trial
+322 0x4010 // __sqr: k=1 skip wenn negativ
+323 0x014C // Operand #0x0000 (0)
+324 0x2800 // Speichere neues rem
+325 0x03AC // Operand #0x03AC (940)
+326 0x1800 // Lade R
+327 0x03AB // Operand #0x03AB (939)
+328 0x3440 // R + 2
+329 0x0002 // Operand #0x0002 (2)
+330 0x2800 // Speichere R
+331 0x03AB // Operand #0x03AB (939)
+332 0x1800 // __sqr: k=0 Lade R
+333 0x03AB // Operand #0x03AB (939)
+334 0x35C0 // R << 1
+336 0x3440 // + 1
+337 0x0001 // Operand #0x0001 (1)
+338 0x2800 // Speichere trial
+339 0x03AD // Operand #0x03AD (941)
+340 0x3540 // ~trial
+342 0x3440 // -trial
+343 0x0001 // Operand #0x0001 (1)
+344 0x2800 // Patch Subtrahend
+345 0x015D // Operand #0x015D (349)
+346 0x1800 // Lade rem
+347 0x03AC // Operand #0x03AC (940)
+348 0x3440 // rem - trial
+350 0x4010 // __sqr: k=0 skip wenn negativ
+351 0x0168 // Operand #0x0000 (0)
+352 0x2800 // Speichere neues rem
+353 0x03AC // Operand #0x03AC (940)
+354 0x1800 // Lade R
+355 0x03AB // Operand #0x03AB (939)
+356 0x3440 // R + 1
+357 0x0001 // Operand #0x0001 (1)
+358 0x2800 // Speichere R
+359 0x03AB // Operand #0x03AB (939)
+360 0x1800 // __sqr: Lade Nachkommastellen D
+361 0x03A4 // Operand #0x03A4 (932)
+362 0x4018 // __sqr: Wenn D == 0 -> Fertig
+363 0x01FE // Operand #0x0000 (0)
+364 0x2800 // Speichere Dec-Zaehler
+365 0x03AE // Operand #0x03AE (942)
+366 0x1800 // Lade rem fuer * 10
+367 0x03AC // Operand #0x03AC (940)
+368 0x35C0 // rem << 1
+370 0x2800 // temp = rem * 2
+371 0x03B1 // Operand #0x03B1 (945)
+372 0x2800 // Patch ADD mit temp
+373 0x017F // Operand #0x017F (383)
+374 0x1800 // Lade rem
+375 0x03AC // Operand #0x03AC (940)
+376 0x35C0 // rem << 1
+378 0x35C0 // rem << 2
+380 0x35C0 // rem << 3
+382 0x3440 // rem*8 + rem*2 = rem*10
+384 0x2800 // Speichere rem*10
+385 0x03AC // Operand #0x03AC (940)
+386 0x1800 // Lade rem fuer * 10
+387 0x03AC // Operand #0x03AC (940)
+388 0x35C0 // rem << 1
+390 0x2800 // temp = rem * 2
+391 0x03B1 // Operand #0x03B1 (945)
+392 0x2800 // Patch ADD mit temp
+393 0x0193 // Operand #0x0193 (403)
+394 0x1800 // Lade rem
+395 0x03AC // Operand #0x03AC (940)
+396 0x35C0 // rem << 1
+398 0x35C0 // rem << 2
+400 0x35C0 // rem << 3
+402 0x3440 // rem*8 + rem*2 = rem*10
+404 0x2800 // Speichere rem*10
+405 0x03AC // Operand #0x03AC (940)
+406 0x1800 // Lade R fuer 20*R
+407 0x03AB // Operand #0x03AB (939)
+408 0x35C0 // R << 1
+410 0x2800 // temp = R * 2
+411 0x03B1 // Operand #0x03B1 (945)
+412 0x2800 // Patch ADD mit temp
+413 0x01A7 // Operand #0x01A7 (423)
+414 0x1800 // Lade R
+415 0x03AB // Operand #0x03AB (939)
+416 0x35C0 // R << 1
+418 0x35C0 // R << 2
+420 0x35C0 // R << 3
+422 0x3440 // R*8 + R*2 = 10*R
+424 0x35C0 // 10*R * 2 = 20*R
+426 0x3440 // 20*R + 1
+427 0x0001 // Operand #0x0001 (1)
+428 0x2800 // Speichere delta = 20*R + 1
+429 0x03B0 // Operand #0x03B0 (944)
+430 0x1400 // Init d = 0
+432 0x2800 // d = 0
+433 0x03AF // Operand #0x03AF (943)
+434 0x1800 // Lade delta
+435 0x03B0 // Operand #0x03B0 (944)
+436 0x3540 // ~delta
+438 0x3440 // -delta
+439 0x0001 // Operand #0x0001 (1)
+440 0x2800 // Patch delta-Subtraktion
+441 0x01BD // Operand #0x01BD (445)
+442 0x1800 // Lade rem
+443 0x03AC // Operand #0x03AC (940)
+444 0x3440 // rem - delta
+446 0x4010 // Wenn rem < delta -> Ziffer fertig
+447 0x01D0 // Operand #0x0000 (0)
+448 0x2800 // rem = rem - delta
+449 0x03AC // Operand #0x03AC (940)
+450 0x1800 // Lade delta
+451 0x03B0 // Operand #0x03B0 (944)
+452 0x3440 // delta + 2
+453 0x0002 // Operand #0x0002 (2)
+454 0x2800 // Speichere delta
+455 0x03B0 // Operand #0x03B0 (944)
+456 0x1800 // Lade d
+457 0x03AF // Operand #0x03AF (943)
+458 0x3440 // d + 1
+459 0x0001 // Operand #0x0001 (1)
+460 0x2800 // Speichere d
+461 0x03AF // Operand #0x03AF (943)
+462 0x4000 // Loop d_loop
+463 0x01B2 // Operand #0x01B2 (434)
+464 0x1800 // Lade R fuer R*10
+465 0x03AB // Operand #0x03AB (939)
+466 0x35C0 // R << 1
+468 0x2800 // temp = R * 2
+469 0x03B1 // Operand #0x03B1 (945)
+470 0x2800 // Patch ADD mit temp
+471 0x01E1 // Operand #0x01E1 (481)
+472 0x1800 // Lade R
+473 0x03AB // Operand #0x03AB (939)
+474 0x35C0 // R << 1
+476 0x35C0 // R << 2
+478 0x35C0 // R << 3
+480 0x3440 // R*10
+482 0x2800 // temp = R * 10
+483 0x03B1 // Operand #0x03B1 (945)
+484 0x2800 // Patch ADD mit R*10
+485 0x01E9 // Operand #0x01E9 (489)
+486 0x1800 // Lade d
+487 0x03AF // Operand #0x03AF (943)
+488 0x3440 // R*10 + d
+490 0x2800 // Speichere neues R
+491 0x03AB // Operand #0x03AB (939)
+492 0x1800 // Lade Dec-Counter
+493 0x03AE // Operand #0x03AE (942)
+494 0x3440 // Dec - 1
+495 0xFFFF // Operand #0xFFFF (65535)
+496 0x2800 // Speichere Dec
+497 0x03AE // Operand #0x03AE (942)
+498 0x4018 // Wenn Dec == 0 -> Fertig
+499 0x01FE // Operand #0x0000 (0)
+500 0x1800 // Pruefe Overflow R >= 3276
+501 0x03AB // Operand #0x03AB (939)
+502 0x3440 // R - 3276
+503 0xF334 // Operand #0xF334 (62260)
+504 0x4010 // Wenn R < 3276 -> Naechste Stelle
+505 0x01FC // Operand #0x0000 (0)
+506 0x4000 // R >= 3276 -> Vorzeitiges Ende
+507 0x01FE // Operand #0x0000 (0)
+508 0x4000 // Naechste Nachkommastelle
+509 0x016E // Operand #0x016E (366)
+510 0x1800 // __sqr: Rueckgabe Wurzel R in Accu
+511 0x03AB // Operand #0x03AB (939)
+512 0x6000 // RETURN __sqr
+513 0x1400 // __sqr: Negativeingabe Rueckgabe 0
+515 0x6000 // RETURN __sqr (negativ)
+
+RUN

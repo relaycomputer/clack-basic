@@ -341,6 +341,8 @@ var keywords = map[string]TokenType{
 	"XOR": TOKEN_XOR,
 	"NOT": TOKEN_NOT,
 	"MOD": TOKEN_MOD,
+	"SQR":  TOKEN_SQR,
+	"SQRT": TOKEN_SQR,
 	"SHL": TOKEN_SHL,
 	"SHR": TOKEN_SHR,
 }

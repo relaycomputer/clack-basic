@@ -53,6 +53,7 @@ const (
 	TOKEN_STAR    // * (Multiplikation via Subroutine)
 	TOKEN_SLASH   // / (Division via Subroutine)
 	TOKEN_MOD     // MOD (Modulo / Divisionsrest)
+	TOKEN_SQR     // SQR / SQRT (Quadratwurzel via Subroutine)
 
 	// Bitweise & Logische Operatoren
 	TOKEN_AND     // AND

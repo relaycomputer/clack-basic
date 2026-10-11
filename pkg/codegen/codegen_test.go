@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -91,4 +92,167 @@ func TestCodeGen_GraphicsStatements(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCodeGen_SqrMath(t *testing.T) {
+	testCases := []struct {
+		name     string
+		source   string
+		expected uint16
+	}{
+		{"SQR of 0", "10 R = SQR(0)\n20 END", 0},
+		{"SQR of 1", "10 R = SQR(1)\n20 END", 1},
+		{"SQR of 4", "10 R = SQR(4)\n20 END", 2},
+		{"SQR of 9", "10 R = SQR(9)\n20 END", 3},
+		{"SQR of 64", "10 R = SQR(64)\n20 END", 8},
+		{"SQR of 100", "10 R = SQR(100)\n20 END", 10},
+		{"SQRT alias 25", "10 R = SQRT(25)\n20 END", 5},
+		{"SQR(2, 0) int", "10 R = SQR(2, 0)\n20 END", 1},
+		{"SQR(2, 1) fixed 1.4", "10 R = SQR(2, 1)\n20 END", 14},
+		{"SQR(2, 2) fixed 1.41", "10 R = SQR(2, 2)\n20 END", 141},
+		{"SQR(3, 2) fixed 1.73", "10 R = SQR(3, 2)\n20 END", 173},
+		{"SQR(10, 2) fixed 3.16", "10 R = SQR(10, 2)\n20 END", 316},
+		{"SQR(100, 1) fixed 10.0", "10 R = SQR(100, 1)\n20 END", 100},
+		{"SQR(100, 2) fixed 10.00", "10 R = SQR(100, 2)\n20 END", 1000},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.NewLexer(tc.source)
+			tokens := l.Tokenize()
+			p := parser.NewParser(tokens)
+			prog, err := p.ParseProgram()
+			if err != nil {
+				t.Fatalf("Parser error for '%s': %v", tc.source, err)
+			}
+
+			gen := NewCodeGenerator()
+			mem, _, err := gen.Generate(prog)
+			if err != nil {
+				t.Fatalf("Codegen error for '%s': %v", tc.source, err)
+			}
+
+			_, finalMem, err := runRelayEmulator(mem, 20000)
+			if err != nil {
+				t.Fatalf("Emulator error for '%s': %v", tc.source, err)
+			}
+
+			rAddr, ok := gen.symbols["R"]
+			if !ok {
+				t.Fatalf("Symbol R not found in symbol table")
+			}
+
+			actualVal := finalMem[rAddr]
+			if actualVal != tc.expected {
+				t.Errorf("Expected %d, got %d for '%s'", tc.expected, actualVal, tc.source)
+			}
+		})
+	}
+}
+
+func runRelayEmulator(memory [MaxMemorySize]uint16, maxCycles int) (uint16, [MaxMemorySize]uint16, error) {
+	pc := uint16(0)
+	var acc uint16
+	var stack uint16
+	var carry uint16
+
+	for cycles := 0; cycles < maxCycles; cycles++ {
+		if pc >= MaxMemorySize {
+			break
+		}
+		cmd := memory[pc]
+		var opVal uint16
+		if pc+1 < MaxMemorySize {
+			opVal = memory[pc+1]
+		}
+
+		switch cmd {
+		case OpNOP:
+			pc = (pc + 1) & 0x03FF
+		case OpLDA:
+			acc = opVal
+			pc = (pc + 2) & 0x03FF
+		case OpLDAM:
+			acc = memory[opVal&0x03FF]
+			pc = (pc + 2) & 0x03FF
+		case OpLDAMM:
+			ptr := opVal & 0x03FF
+			target := memory[ptr] & 0x03FF
+			acc = memory[target]
+			pc = (pc + 2) & 0x03FF
+		case OpSTAM:
+			addr := opVal & 0x03FF
+			memory[addr] = acc
+			pc = (pc + 2) & 0x03FF
+		case OpSTAMM:
+			ptr := opVal & 0x03FF
+			target := memory[ptr] & 0x03FF
+			memory[target] = acc
+			pc = (pc + 2) & 0x03FF
+		case OpADD:
+			res := uint32(acc) + uint32(opVal)
+			if res > 0xFFFF {
+				carry = 1
+			} else {
+				carry = 0
+			}
+			acc = uint16(res & 0xFFFF)
+			pc = (pc + 2) & 0x03FF
+		case OpAND:
+			acc = acc & opVal
+			pc = (pc + 2) & 0x03FF
+		case OpOR:
+			acc = acc | opVal
+			pc = (pc + 2) & 0x03FF
+		case OpNOT:
+			acc = ^acc
+			pc = (pc + 2) & 0x03FF
+		case OpSHR:
+			carry = acc & 1
+			acc = acc >> 1
+			pc = (pc + 2) & 0x03FF
+		case OpSHL:
+			carry = (acc >> 15) & 1
+			acc = (acc << 1) & 0xFFFF
+			pc = (pc + 2) & 0x03FF
+		case OpBA:
+			if (opVal & 0x03FF) == pc {
+				// Halt loop (BA to self)
+				return acc, memory, nil
+			}
+			pc = opVal & 0x03FF
+		case OpBC:
+			if carry == 1 {
+				pc = opVal & 0x03FF
+			} else {
+				pc = (pc + 2) & 0x03FF
+			}
+		case OpBN:
+			if (acc & 0x8000) != 0 {
+				pc = opVal & 0x03FF
+			} else {
+				pc = (pc + 2) & 0x03FF
+			}
+		case OpBE:
+			if (acc & 0x0001) == 0 {
+				pc = opVal & 0x03FF
+			} else {
+				pc = (pc + 2) & 0x03FF
+			}
+		case OpBZ:
+			if acc == 0 {
+				pc = opVal & 0x03FF
+			} else {
+				pc = (pc + 2) & 0x03FF
+			}
+		case OpCALL:
+			stack = (pc + 2) & 0x03FF
+			pc = opVal & 0x03FF
+		case OpRET:
+			pc = stack & 0x03FF
+		default:
+			return acc, memory, fmt.Errorf("Unknown opcode 0x%04X at PC: 0x%03X", cmd, pc)
+		}
+	}
+	return acc, memory, fmt.Errorf("Exceeded cycle limit %d at PC 0x%03X", maxCycles, pc)
 }

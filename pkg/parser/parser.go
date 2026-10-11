@@ -741,6 +741,24 @@ func (p *Parser) parsePrefix() ast.Expr {
 		}
 		return &ast.InExpr{Port: port, Line: line}
 
+	case lexer.TOKEN_SQR:
+		p.nextToken()
+		hasParen := false
+		if p.curTok.Type == lexer.TOKEN_LPAREN {
+			hasParen = true
+			p.nextToken()
+		}
+		val := p.parseExpression(PREC_LOWEST)
+		var decimals ast.Expr = &ast.NumberLiteral{Value: 0, Line: line}
+		if p.curTok.Type == lexer.TOKEN_COMMA {
+			p.nextToken()
+			decimals = p.parseExpression(PREC_LOWEST)
+		}
+		if hasParen && p.curTok.Type == lexer.TOKEN_RPAREN {
+			p.nextToken()
+		}
+		return &ast.SqrExpr{Value: val, Decimals: decimals, Line: line}
+
 	case lexer.TOKEN_LPAREN:
 		p.nextToken()
 		exp := p.parseExpression(PREC_LOWEST)
