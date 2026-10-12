@@ -76,10 +76,18 @@ jobs:
           upload_asset "dist-bin/clack-darwin-arm64" "clack-darwin-arm64"
           upload_asset "dist-bin/clack-darwin-amd64" "clack-darwin-amd64"
 
-      - name: Send WhatsApp Notification
+      - name: Send WhatsApp Notification on Success
         if: success()
         run: |
           TAG="${{ github.ref_name }}"
-          curl -s -X POST http://100.64.0.3:3080/send \
-            -H "Content-Type: application/json" \
-            -d "{\"to\": \"120363411181500990@g.us\", \"text\": \"🚀 Clack-Basic Release ${TAG} (mit optimierter SQR Wurzelfunktion) wurde soeben vollautomatisch vom neuen Forgejo CI/CD-Runner auf Popel gebaut und veröffentlicht!\n\nBinaries für Linux, Windows und macOS stehen bereit:\nhttps://git.latentforge.dev/${GITHUB_REPOSITORY}/releases/tag/${TAG}\"}" || true
+          MSG=$(printf "🚀 *Clack-Basic Release %s Veröffentlicht*\n• Multiplattform-Binaries (Linux x86/ARM, Windows .exe, macOS ARM) erfolgreich gebaut!\n• Runner: Popel ARM64 (Forgejo CI)\n\nDownloads & Changelog:\nhttps://git.latentforge.dev/${{ github.repository }}/releases/tag/%s" "$TAG" "$TAG")
+          jq -n --arg to "120363411181500990@g.us" --arg text "$MSG" '{to: $to, text: $text}' | \
+            curl -s -X POST http://100.64.0.3:3080/send -H "Content-Type: application/json" -d @- || true
+
+      - name: Send WhatsApp Notification on Failure
+        if: failure()
+        run: |
+          TAG="${{ github.ref_name }}"
+          MSG=$(printf "❌ *Release Build FEHLGESCHLAGEN*: %s (%s)\nBitte prüfen: https://git.latentforge.dev/${{ github.repository }}/actions" "$TAG" "${{ github.repository }}")
+          jq -n --arg to "120363411181500990@g.us" --arg text "$MSG" '{to: $to, text: $text}' | \
+            curl -s -X POST http://100.64.0.3:3080/send -H "Content-Type: application/json" -d @- || true

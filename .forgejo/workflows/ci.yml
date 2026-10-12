@@ -25,3 +25,20 @@ jobs:
         run: |
           go build -v -o bin/clack .
           ls -lh bin/clack
+
+      - name: Send WhatsApp Notification on Success
+        if: success()
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -n 1)
+          COMMIT_AUTHOR=$(git log -1 --pretty=%an)
+          MSG=$(printf "✅ *CI Build Erfolgreich* (${{ github.repository }})\n• Branch: ${{ github.ref_name }}\n• Commit: %s\n• Autor: %s\n• Runner: Popel ARM64 (Forgejo CI)\n\nhttps://git.latentforge.dev/${{ github.repository }}/actions" "$COMMIT_MSG" "$COMMIT_AUTHOR")
+          jq -n --arg to "120363411181500990@g.us" --arg text "$MSG" '{to: $to, text: $text}' | \
+            curl -s -X POST http://100.64.0.3:3080/send -H "Content-Type: application/json" -d @- || true
+
+      - name: Send WhatsApp Notification on Failure
+        if: failure()
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -n 1)
+          MSG=$(printf "❌ *CI Build FEHLGESCHLAGEN* (${{ github.repository }})\n• Branch: ${{ github.ref_name }}\n• Commit: %s\n\nBitte prüfen: https://git.latentforge.dev/${{ github.repository }}/actions" "$COMMIT_MSG")
+          jq -n --arg to "120363411181500990@g.us" --arg text "$MSG" '{to: $to, text: $text}' | \
+            curl -s -X POST http://100.64.0.3:3080/send -H "Content-Type: application/json" -d @- || true
