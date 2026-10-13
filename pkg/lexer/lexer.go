@@ -329,7 +329,6 @@ var keywords = map[string]TokenType{
 	"PLOT":      TOKEN_PLOT,
 	"LINE":      TOKEN_LINE,
 	"PIXELMOVE": TOKEN_PIXELMOVE,
-	"BY":        TOKEN_BY,
 	"PRINT":     TOKEN_PRINT,
 	"END":       TOKEN_END,
 	"STOP":      TOKEN_END,

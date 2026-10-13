@@ -578,7 +578,7 @@ func (p *Parser) parsePixelMoveStatement() ast.Stmt {
 	isRelative := false
 	if p.curTok.Type == lexer.TOKEN_TO {
 		p.nextToken()
-	} else if p.curTok.Type == lexer.TOKEN_BY {
+	} else if p.curTok.Type == lexer.TOKEN_BY || (p.curTok.Type == lexer.TOKEN_IDENT && p.curTok.Lexeme == "BY") {
 		isRelative = true
 		p.nextToken()
 	} else if p.curTok.Type == lexer.TOKEN_COMMA {
