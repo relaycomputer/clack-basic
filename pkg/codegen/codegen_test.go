@@ -256,3 +256,41 @@ func runRelayEmulator(memory [MaxMemorySize]uint16, maxCycles int) (uint16, [Max
 	}
 	return acc, memory, fmt.Errorf("Exceeded cycle limit %d at PC 0x%03X", maxCycles, pc)
 }
+
+func TestCodeGen_Screen64(t *testing.T) {
+	source := `10 SCREEN 64
+20 A = 42
+30 B = 99
+40 CLS
+50 END`
+	l := lexer.NewLexer(source)
+	tokens := l.Tokenize()
+	p := parser.NewParser(tokens)
+	prog, err := p.ParseProgram()
+	if err != nil {
+		t.Fatalf("Parser error: %v", err)
+	}
+
+	cg := NewCodeGenerator()
+	_, _, err = cg.Generate(prog)
+	if err != nil {
+		t.Fatalf("Codegen error: %v", err)
+	}
+
+	if cg.resolution != 64 {
+		t.Errorf("Expected resolution 64, got %d", cg.resolution)
+	}
+	if cg.displayBase != 768 {
+		t.Errorf("Expected displayBase 768, got %d", cg.displayBase)
+	}
+	if cg.varBaseAddr != 700 {
+		t.Errorf("Expected varBaseAddr 700, got %d", cg.varBaseAddr)
+	}
+	if cg.symbols["A"] != 700 {
+		t.Errorf("Expected variable A at 700, got %d", cg.symbols["A"])
+	}
+	if cg.symbols["B"] != 701 {
+		t.Errorf("Expected variable B at 701, got %d", cg.symbols["B"])
+	}
+}
+

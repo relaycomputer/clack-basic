@@ -325,6 +325,8 @@ var keywords = map[string]TokenType{
 	"IN":      TOKEN_IN,
 	"OUT":     TOKEN_OUT,
 	"CLS":       TOKEN_CLS,
+	"SCREEN":    TOKEN_SCREEN,
+	"MODE":      TOKEN_MODE,
 	"PSET":      TOKEN_PSET,
 	"PLOT":      TOKEN_PLOT,
 	"LINE":      TOKEN_LINE,

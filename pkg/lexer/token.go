@@ -38,6 +38,8 @@ const (
 	TOKEN_IN      // IN(Port)
 	TOKEN_OUT     // OUT Port, Wert
 	TOKEN_CLS       // CLS (Display / Matrix löschen)
+	TOKEN_SCREEN    // SCREEN 32 oder SCREEN 64
+	TOKEN_MODE      // MODE 32 oder MODE 64
 	TOKEN_PSET      // PSET X, Y, Color (Pixel auf Matrix setzen)
 	TOKEN_PLOT      // PLOT X, Y, Color
 	TOKEN_LINE      // LINE X1, Y1 TO X2, Y2 [, Color]

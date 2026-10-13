@@ -177,6 +177,8 @@ func (p *Parser) parseStatement() ast.Stmt {
 		return p.parseOutStatement()
 	case lexer.TOKEN_CLS:
 		return p.parseClsStatement()
+	case lexer.TOKEN_SCREEN, lexer.TOKEN_MODE:
+		return p.parseScreenStatement()
 	case lexer.TOKEN_PSET, lexer.TOKEN_PLOT:
 		return p.parsePsetStatement()
 	case lexer.TOKEN_LINE:
@@ -520,6 +522,19 @@ func (p *Parser) parseOutStatement() ast.Stmt {
 	val := p.parseExpression(PREC_LOWEST)
 
 	return &ast.OutStmt{Port: port, Value: val, Line: line}
+}
+
+func (p *Parser) parseScreenStatement() ast.Stmt {
+	line := p.curTok.Line
+	p.nextToken() // SCREEN oder MODE überspringen
+
+	res := 32
+	if p.curTok.Type == lexer.TOKEN_NUMBER {
+		res = p.curTok.Value
+		p.nextToken()
+	}
+
+	return &ast.ScreenStmt{Resolution: res, Line: line}
 }
 
 func (p *Parser) parseClsStatement() ast.Stmt {

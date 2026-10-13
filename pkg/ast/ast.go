@@ -227,6 +227,15 @@ type OutStmt struct {
 func (o *OutStmt) Pos() int  { return o.Line }
 func (o *OutStmt) stmtNode() {}
 
+// ScreenStmt: Setzt Display-Auflösung (32 oder 64) -> SCREEN 32 oder SCREEN 64 / MODE 64
+type ScreenStmt struct {
+	Resolution int
+	Line       int
+}
+
+func (s *ScreenStmt) Pos() int  { return s.Line }
+func (s *ScreenStmt) stmtNode() {}
+
 // ClsStmt: Löscht Display Matrix (ganz oder Zeilenbereich) -> CLS oder CLS StartRow, EndRow
 type ClsStmt struct {
 	StartRow Expr

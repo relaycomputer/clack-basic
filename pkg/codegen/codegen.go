@@ -36,6 +36,11 @@ type CodeGenerator struct {
 	nextVarAddr  uint16
 	nextTempAddr uint16
 
+	displayBase  uint16
+	varBaseAddr  uint16
+	tempBaseAddr uint16
+	resolution   int
+
 	labels       map[string]uint16 // Label-Name -> PC-Adresse
 	fixups       []labelFixup      // Unaufgelöste Sprungziele (Forward Jumps)
 
@@ -72,8 +77,12 @@ type forLoopContext struct {
 func NewCodeGenerator() *CodeGenerator {
 	return &CodeGenerator{
 		symbols:      make(map[string]uint16),
+		displayBase:  DisplayBase,
+		varBaseAddr:  VarBaseAddr,
+		tempBaseAddr: TempBaseAddr,
 		nextVarAddr:  VarBaseAddr,
 		nextTempAddr: TempBaseAddr,
+		resolution:   32,
 		labels:       make(map[string]uint16),
 		fixups:       []labelFixup{},
 		dataTable:    []int{},
@@ -82,8 +91,34 @@ func NewCodeGenerator() *CodeGenerator {
 	}
 }
 
+// SetResolution konfiguriert die Speicheraufteilung anhand der Display-Auflösung (32x32 oder 64x64).
+func (g *CodeGenerator) SetResolution(res int) {
+	g.resolution = res
+	if res == 64 {
+		g.displayBase = 768
+		g.varBaseAddr = 700
+		g.tempBaseAddr = 740
+		g.nextVarAddr = 700
+		g.nextTempAddr = 740
+	} else {
+		g.displayBase = DisplayBase
+		g.varBaseAddr = VarBaseAddr
+		g.tempBaseAddr = TempBaseAddr
+		g.nextVarAddr = VarBaseAddr
+		g.nextTempAddr = TempBaseAddr
+	}
+}
+
 // Generate übersetzt das Programm und liefert das fertige 1024-Wort-Speicherabbild.
 func (g *CodeGenerator) Generate(prog *ast.Program) ([MaxMemorySize]uint16, map[uint16]string, error) {
+	// Vorab-Scan nach Auflösung (z.B. SCREEN 64)
+	for _, stmt := range prog.Statements {
+		if sc, ok := stmt.(*ast.ScreenStmt); ok {
+			g.SetResolution(sc.Resolution)
+			break
+		}
+	}
+
 	// Start-Sprung über Boot-Bereich (Sprung zu eigentlichem Programmstart)
 	g.emit(OpBA, 0, "Initialer Sprung zum Hauptprogramm")
 	g.fixups = append(g.fixups, labelFixup{patchPC: 1, label: "__main_start"})
@@ -117,8 +152,8 @@ func (g *CodeGenerator) Generate(prog *ast.Program) ([MaxMemorySize]uint16, map[
 	// DATA-Tabelle im oberen Speicher ablegen
 	g.emitDataTable()
 
-	if g.pc >= VarBaseAddr {
-		return g.memory, g.comments, fmt.Errorf("Programm zu groß: Code-Größe (%d Worte) überschreitet Variablenbereich ab Adresse %d", g.pc, VarBaseAddr)
+	if g.pc >= g.varBaseAddr {
+		return g.memory, g.comments, fmt.Errorf("Programm zu groß: Code-Größe (%d Worte) überschreitet Variablenbereich ab Adresse %d", g.pc, g.varBaseAddr)
 	}
 
 	// 2. Pass: Alle offenen Sprungmarken (Fixups) auflösen
@@ -206,30 +241,44 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 		g.emit(OpSTAM, 0, "POKE [dynamisch]")
 		return nil
 
+	case *ast.ScreenStmt:
+		// SCREEN Stmt konfiguriert Speicheraufteilung (Adresse 768..1023 bzw. 960..1023)
+		return nil
+
 	case *ast.ClsStmt:
 		g.needCls = true
 		ptrCls := g.getOrCreateVar("__cls_ptr")
 		endCls := g.getOrCreateVar("__cls_end_addr")
 
 		if s.StartRow != nil {
-			// StartAddr = DisplayBase + StartRow * 2
+			shiftCount := 1
+			rowMultiplier := uint16(2)
+			if g.resolution == 64 {
+				shiftCount = 2
+				rowMultiplier = 4
+			}
+			// StartAddr = DisplayBase + StartRow * rowMultiplier
 			if err := g.compileExpr(s.StartRow); err != nil {
 				return err
 			}
-			g.emit(OpSHL, 0, "StartRow * 2")
-			g.emit(OpADD, DisplayBase, "DisplayBase + StartRow*2")
+			for sc := 0; sc < shiftCount; sc++ {
+				g.emit(OpSHL, 0, "StartRow shift")
+			}
+			g.emit(OpADD, g.displayBase, "DisplayBase + StartRow*shift")
 			g.emit(OpSTAM, ptrCls, "Setze __cls_ptr")
 
-			// EndAddr = DisplayBase + EndRow * 2 + 2
+			// EndAddr = DisplayBase + EndRow * rowMultiplier + rowMultiplier
 			if err := g.compileExpr(s.EndRow); err != nil {
 				return err
 			}
-			g.emit(OpSHL, 0, "EndRow * 2")
-			g.emit(OpADD, DisplayBase+2, "DisplayBase + EndRow*2 + 2")
+			for sc := 0; sc < shiftCount; sc++ {
+				g.emit(OpSHL, 0, "EndRow shift")
+			}
+			g.emit(OpADD, g.displayBase+rowMultiplier, "DisplayBase + EndRow*shift + rowMultiplier")
 			g.emit(OpSTAM, endCls, "Setze __cls_end_addr")
 		} else {
-			// Volles Display löschen: 960 bis 1024
-			g.emit(OpLDA, DisplayBase, "Init __cls_ptr (960)")
+			// Volles Display löschen: displayBase bis 1024
+			g.emit(OpLDA, g.displayBase, fmt.Sprintf("Init __cls_ptr (%d)", g.displayBase))
 			g.emit(OpSTAM, ptrCls, "Speichere __cls_ptr")
 			g.emit(OpLDA, 1024, "Init __cls_end_addr (1024)")
 			g.emit(OpSTAM, endCls, "Speichere __cls_end_addr")
@@ -628,6 +677,30 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 				return err
 			}
 			g.emit(OpOR, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu OR 0x%04X", num.Value))
+			return nil
+		} else if op == "SHR" {
+			if err := g.compileExpr(e.Left); err != nil {
+				return err
+			}
+			shifts := num.Value
+			if shifts <= 0 {
+				shifts = 1
+			}
+			for s := 0; s < shifts; s++ {
+				g.emit(OpSHR, 0, "SHR Rechtsshift")
+			}
+			return nil
+		} else if op == "SHL" {
+			if err := g.compileExpr(e.Left); err != nil {
+				return err
+			}
+			shifts := num.Value
+			if shifts <= 0 {
+				shifts = 1
+			}
+			for s := 0; s < shifts; s++ {
+				g.emit(OpSHL, 0, "SHL Linksshift")
+			}
 			return nil
 		}
 	}
@@ -1564,8 +1637,8 @@ func (g *CodeGenerator) getOrCreateVar(name string) uint16 {
 func (g *CodeGenerator) allocTemp() uint16 {
 	addr := g.nextTempAddr
 	g.nextTempAddr++
-	if g.nextTempAddr >= DisplayBase {
-		g.nextTempAddr = TempBaseAddr // Wrap around
+	if g.nextTempAddr >= g.displayBase {
+		g.nextTempAddr = g.tempBaseAddr // Wrap around
 	}
 	return addr
 }
