@@ -283,14 +283,63 @@ func TestCodeGen_Screen64(t *testing.T) {
 	if cg.displayBase != 768 {
 		t.Errorf("Expected displayBase 768, got %d", cg.displayBase)
 	}
-	if cg.varBaseAddr != 700 {
-		t.Errorf("Expected varBaseAddr 700, got %d", cg.varBaseAddr)
+	if cg.varBaseAddr != 734 {
+		t.Errorf("Expected varBaseAddr 734, got %d", cg.varBaseAddr)
 	}
-	if cg.symbols["A"] != 700 {
-		t.Errorf("Expected variable A at 700, got %d", cg.symbols["A"])
+	if cg.symbols["A"] != 734 {
+		t.Errorf("Expected variable A at 734, got %d", cg.symbols["A"])
 	}
-	if cg.symbols["B"] != 701 {
-		t.Errorf("Expected variable B at 701, got %d", cg.symbols["B"])
+	if cg.symbols["B"] != 735 {
+		t.Errorf("Expected variable B at 735, got %d", cg.symbols["B"])
 	}
 }
+
+func TestCodeGen_BitwiseLogic(t *testing.T) {
+	testCases := []struct {
+		name     string
+		source   string
+		expected uint16
+	}{
+		{"AND with literal", "10 A = 15\n20 R = A AND 6\n30 END", 6},
+		{"AND with variable", "10 A = 15\n20 B = 6\n30 R = A AND B\n40 END", 6},
+		{"OR with literal", "10 A = 9\n20 R = A OR 6\n30 END", 15},
+		{"OR with variable", "10 A = 9\n20 B = 6\n30 R = A OR B\n40 END", 15},
+		{"XOR with literal", "10 A = 12\n20 R = A XOR 10\n30 END", 6},
+		{"XOR with variable", "10 A = 12\n20 B = 10\n30 R = A XOR B\n40 END", 6},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.NewLexer(tc.source)
+			tokens := l.Tokenize()
+			p := parser.NewParser(tokens)
+			prog, err := p.ParseProgram()
+			if err != nil {
+				t.Fatalf("Parser error for '%s': %v", tc.source, err)
+			}
+
+			gen := NewCodeGenerator()
+			mem, _, err := gen.Generate(prog)
+			if err != nil {
+				t.Fatalf("Codegen error for '%s': %v", tc.source, err)
+			}
+
+			_, finalMem, err := runRelayEmulator(mem, 20000)
+			if err != nil {
+				t.Fatalf("Emulator error for '%s': %v", tc.source, err)
+			}
+
+			rAddr, ok := gen.symbols["R"]
+			if !ok {
+				t.Fatalf("Symbol R not found in symbol table")
+			}
+
+			actualVal := finalMem[rAddr]
+			if actualVal != tc.expected {
+				t.Errorf("Expected %d, got %d for '%s'", tc.expected, actualVal, tc.source)
+			}
+		})
+	}
+}
+
 

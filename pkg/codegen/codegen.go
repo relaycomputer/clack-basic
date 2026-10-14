@@ -23,8 +23,8 @@ import (
 
 const (
 	MaxMemorySize = 1024
-	VarBaseAddr   = 930 // Variablen werden ab Adresse 930 abgelegt
-	TempBaseAddr  = 950 // Temporäre Berechnungszellen ab Adresse 950
+	VarBaseAddr   = 920 // Variablen ab Adresse 920 (32 Variablen: 920..951)
+	TempBaseAddr  = 952 // Temporäre Berechnungszellen ab 952 (8 Zellen: 952..959)
 	DisplayBase   = 960 // Display-Bereich: 960..1023
 )
 
@@ -96,10 +96,10 @@ func (g *CodeGenerator) SetResolution(res int) {
 	g.resolution = res
 	if res == 64 {
 		g.displayBase = 768
-		g.varBaseAddr = 700
-		g.tempBaseAddr = 740
-		g.nextVarAddr = 700
-		g.nextTempAddr = 740
+		g.varBaseAddr = 734
+		g.tempBaseAddr = 756
+		g.nextVarAddr = 734
+		g.nextTempAddr = 756
 	} else {
 		g.displayBase = DisplayBase
 		g.varBaseAddr = VarBaseAddr
@@ -154,6 +154,9 @@ func (g *CodeGenerator) Generate(prog *ast.Program) ([MaxMemorySize]uint16, map[
 
 	if g.pc >= g.varBaseAddr {
 		return g.memory, g.comments, fmt.Errorf("Programm zu groß: Code-Größe (%d Worte) überschreitet Variablenbereich ab Adresse %d", g.pc, g.varBaseAddr)
+	}
+	if g.nextVarAddr > g.tempBaseAddr {
+		return g.memory, g.comments, fmt.Errorf("Zu viele Variablen: Variablen-Bereich (%d bis %d) überschreitet temporären Bereich ab Adresse %d", g.varBaseAddr, g.nextVarAddr, g.tempBaseAddr)
 	}
 
 	// 2. Pass: Alle offenen Sprungmarken (Fixups) auflösen
@@ -678,6 +681,23 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 			}
 			g.emit(OpOR, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu OR 0x%04X", num.Value))
 			return nil
+		} else if op == "XOR" {
+			if err := g.compileExpr(e.Left); err != nil {
+				return err
+			}
+			tempA := g.allocTemp()
+			g.emit(OpSTAM, tempA, "Temp A sichern")
+			g.emit(OpOR, uint16(num.Value&0xFFFF), "A OR B")
+			tempOr := g.allocTemp()
+			g.emit(OpSTAM, tempOr, "Temp (A OR B) sichern")
+			g.emit(OpLDAM, tempA, "Lade A")
+			g.emit(OpAND, uint16(num.Value&0xFFFF), "A AND B")
+			g.emit(OpNOT, 0, "NOT (A AND B)")
+			patchAnd := g.pc + 5
+			g.emit(OpSTAM, patchAnd, "Patch AND")
+			g.emit(OpLDAM, tempOr, "Lade (A OR B)")
+			g.emit(OpAND, 0, "(A OR B) AND NOT (A AND B)")
+			return nil
 		} else if op == "SHR" {
 			if err := g.compileExpr(e.Left); err != nil {
 				return err
@@ -742,10 +762,47 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 		g.emit(OpADD, 0, "A + (-B)")
 
 	case "AND":
-		g.emit(OpAND, 0xFFFF, "AND Operation")
+		tempA := g.allocTemp()
+		g.emit(OpSTAM, tempA, "Temp A sichern")
+		g.emit(OpLDAM, tempRight, "Lade B")
+		patchAddr := g.pc + 5
+		g.emit(OpSTAM, patchAddr, "Patch AND Operand mit B")
+		g.emit(OpLDAM, tempA, "Lade A zurueck")
+		g.emit(OpAND, 0, "A AND B")
 
 	case "OR":
-		g.emit(OpOR, 0x0000, "OR Operation")
+		tempA := g.allocTemp()
+		g.emit(OpSTAM, tempA, "Temp A sichern")
+		g.emit(OpLDAM, tempRight, "Lade B")
+		patchAddr := g.pc + 5
+		g.emit(OpSTAM, patchAddr, "Patch OR Operand mit B")
+		g.emit(OpLDAM, tempA, "Lade A zurueck")
+		g.emit(OpOR, 0, "A OR B")
+
+	case "XOR":
+		// A XOR B = (A OR B) AND NOT (A AND B)
+		tempA := g.allocTemp()
+		g.emit(OpSTAM, tempA, "Temp A sichern")
+		// A OR B
+		g.emit(OpLDAM, tempRight, "Lade B")
+		patchOr := g.pc + 5
+		g.emit(OpSTAM, patchOr, "Patch OR mit B")
+		g.emit(OpLDAM, tempA, "Lade A")
+		g.emit(OpOR, 0, "A OR B")
+		tempOr := g.allocTemp()
+		g.emit(OpSTAM, tempOr, "Temp (A OR B)")
+		// NOT (A AND B)
+		g.emit(OpLDAM, tempRight, "Lade B")
+		patchAnd1 := g.pc + 5
+		g.emit(OpSTAM, patchAnd1, "Patch AND mit B")
+		g.emit(OpLDAM, tempA, "Lade A")
+		g.emit(OpAND, 0, "A AND B")
+		g.emit(OpNOT, 0, "NOT (A AND B)")
+		// (A OR B) AND NOT (A AND B)
+		patchAnd2 := g.pc + 5
+		g.emit(OpSTAM, patchAnd2, "Patch AND mit NOT(A AND B)")
+		g.emit(OpLDAM, tempOr, "Lade (A OR B)")
+		g.emit(OpAND, 0, "(A OR B) AND NOT (A AND B)")
 
 	case "SHL":
 		g.emit(OpSHL, 0, "SHL Linksshift")
