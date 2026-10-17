@@ -19,7 +19,11 @@ jobs:
 
       - name: Run Go Unit Tests
         run: |
-          go test -v ./...
+          go test -v ./pkg/...
+
+      - name: Compile WASM Module
+        run: |
+          GOOS=js GOARCH=wasm go build -v -o /dev/null ./wasm
 
       - name: Compile Binary
         run: |

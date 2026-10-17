@@ -15,7 +15,8 @@ jobs:
       - name: Run Tests
         run: |
           go version
-          go test -v ./...
+          go test -v ./pkg/...
+          GOOS=js GOARCH=wasm go build -v -o /dev/null ./wasm
 
       - name: Compile Multiplatform Binaries
         run: |
