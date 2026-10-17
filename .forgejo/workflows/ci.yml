@@ -7,14 +7,14 @@ on:
 
 jobs:
   test:
-    runs-on: [ubuntu-latest, go-1.23]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Toolchain Info
         run: |
-          echo "🚀 Running on Popel ARM64 Forgejo Runner"
+          echo "🚀 Running on Forgejo CI Runner ($(uname -m))"
           go version
 
       - name: Run Go Unit Tests
