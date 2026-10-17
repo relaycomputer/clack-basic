@@ -119,12 +119,16 @@ func (g *CodeGenerator) Generate(prog *ast.Program) ([MaxMemorySize]uint16, map[
 		}
 	}
 
-	// Start-Sprung über Boot-Bereich (Sprung zu eigentlichem Programmstart)
-	g.emit(OpBA, 0, "Initialer Sprung zum Hauptprogramm")
+	// Start-Sprung über Boot-Bereich & Hardware-I/O-Register (Sprung über Addr 2=OUT, 3=IN zu Hauptprogramm)
+	g.emit(OpBA, 0, "Initialer Sprung über Hardware I/O (Addr 2=OUT, 3=IN)")
 	g.fixups = append(g.fixups, labelFixup{patchPC: 1, label: "__main_start"})
 
-	// Hauptprogramm-Einstieg
-	g.pc = 10 // Start ab PC = 10
+	// Hardware Register 2 & 3 reservieren
+	g.comments[2] = "Hardware Output Register (8-Bit)"
+	g.comments[3] = "Hardware Input Register (8-Bit)"
+
+	// Hauptprogramm-Einstieg ab Adresse 4 (überspringt 2 & 3)
+	g.pc = 4
 	g.labels["__main_start"] = g.pc
 
 	// Initialisiere __data_ptr nur wenn DATA existiert
