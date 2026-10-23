@@ -538,7 +538,99 @@ func TestCodeGen_MaxPerformanceOptimizations(t *testing.T) {
 			t.Errorf("Expected 0x8000 at display addr 960, got 0x%04X", finalMem[960])
 		}
 	})
+
+	t.Run("Direct_IF_And_IF_GOTO_Branching", func(t *testing.T) {
+		src := `
+LET X = -5
+LET Y = 20
+LET RES = 0
+IF X < 0 THEN
+    LET X = -X
+END IF
+IF X = 5 THEN
+    LET RES = RES + 10
+END IF
+IF Y > 15 THEN
+    GOTO JUMP_OK
+END IF
+LET RES = 999
+JUMP_OK:
+IF Y >= 20 THEN
+    LET RES = RES + X
+ELSE
+    LET RES = 0
+END IF
+END
+`
+		l := lexer.NewLexer(src)
+		prog, err := parser.NewParser(l.Tokenize()).ParseProgram()
+		if err != nil {
+			t.Fatalf("Parse error: %v", err)
+		}
+		gen := NewCodeGenerator()
+		mem, _, err := gen.Generate(prog)
+		if err != nil {
+			t.Fatalf("Codegen error: %v", err)
+		}
+
+		_, finalMem, err := runRelayEmulator(mem, 2000)
+		if err != nil {
+			t.Fatalf("Emulator error: %v", err)
+		}
+		if finalMem[gen.symbols["RES"]] != 15 {
+			t.Errorf("Expected RES=15, got %d", finalMem[gen.symbols["RES"]])
+		}
+	})
+
+	t.Run("FOR_Negative_Step_And_Dynamic_Limit", func(t *testing.T) {
+		src := `
+LET SUM = 0
+FOR I = 10 TO 2 STEP -2
+    LET SUM = SUM + I
+NEXT I
+END
+`
+		l := lexer.NewLexer(src)
+		prog, err := parser.NewParser(l.Tokenize()).ParseProgram()
+		if err != nil {
+			t.Fatalf("Parse error: %v", err)
+		}
+		gen := NewCodeGenerator()
+		mem, _, err := gen.Generate(prog)
+		if err != nil {
+			t.Fatalf("Codegen error: %v", err)
+		}
+
+		_, finalMem, err := runRelayEmulator(mem, 5000)
+		if err != nil {
+			t.Fatalf("Emulator error: %v", err)
+		}
+		// 10 + 8 + 6 + 4 + 2 = 30
+		if finalMem[gen.symbols["SUM"]] != 30 {
+			t.Errorf("Expected SUM=30 for STEP -2 loop, got %d", finalMem[gen.symbols["SUM"]])
+		}
+	})
+
+	t.Run("LINE_Bitmask_Table_And_STAMM", func(t *testing.T) {
+		src := "10 CLS\n20 LINE 0, 0 TO 2, 0, 1\n30 END\n"
+		l := lexer.NewLexer(src)
+		prog, err := parser.NewParser(l.Tokenize()).ParseProgram()
+		if err != nil {
+			t.Fatalf("Parse error: %v", err)
+		}
+		gen := NewCodeGenerator()
+		mem, _, err := gen.Generate(prog)
+		if err != nil {
+			t.Fatalf("Codegen error: %v", err)
+		}
+
+		_, finalMem, err := runRelayEmulator(mem, 10000)
+		if err != nil {
+			t.Fatalf("Emulator error: %v", err)
+		}
+		// Bits 15, 14, 13 (0x8000 | 0x4000 | 0x2000 = 0xE000) in Word 1 (Addr 961)
+		if finalMem[961] != 0xE000 {
+			t.Errorf("Expected 0xE000 at display addr 961 after LINE 0,0 TO 2,0, got 0x%04X", finalMem[961])
+		}
+	})
 }
-
-
-

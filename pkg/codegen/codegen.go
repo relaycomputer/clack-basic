@@ -111,11 +111,14 @@ func (g *CodeGenerator) SetResolution(res int) {
 
 // Generate übersetzt das Programm und liefert das fertige 1024-Wort-Speicherabbild.
 func (g *CodeGenerator) Generate(prog *ast.Program) ([MaxMemorySize]uint16, map[uint16]string, error) {
-	// Vorab-Scan nach Auflösung (z.B. SCREEN 64)
+	// Vorab-Scan nach Auflösung (z.B. SCREEN 64) und DATA-Anweisungen
+	hasData := false
 	for _, stmt := range prog.Statements {
 		if sc, ok := stmt.(*ast.ScreenStmt); ok {
 			g.SetResolution(sc.Resolution)
-			break
+		}
+		if _, ok := stmt.(*ast.DataStmt); ok {
+			hasData = true
 		}
 	}
 
@@ -132,7 +135,7 @@ func (g *CodeGenerator) Generate(prog *ast.Program) ([MaxMemorySize]uint16, map[
 	g.labels["__main_start"] = g.pc
 
 	// Initialisiere __data_ptr nur wenn DATA existiert
-	if len(g.dataTable) > 0 {
+	if hasData || len(g.dataTable) > 0 {
 		ptrAddr := g.getOrCreateVar("__data_ptr")
 		g.emit(OpLDA, 0, "Init __data_ptr")
 		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__data_table_start"})
@@ -231,11 +234,11 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 
 	case *ast.PokeStmt:
 		// Spezialfall: Konstante Adresse (z.B. POKE 2, X oder POKE 960, 0)
-		if numAddr, ok := s.Address.(*ast.NumberLiteral); ok {
+		if addrVal, ok := evalConstExpr(s.Address); ok {
 			if err := g.compileExpr(s.Value); err != nil {
 				return err
 			}
-			g.emit(OpSTAM, uint16(numAddr.Value&0xFFFF), fmt.Sprintf("POKE [%d] = Accu (direkt)", numAddr.Value))
+			g.emit(OpSTAM, uint16(addrVal&0xFFFF), fmt.Sprintf("POKE [%d] = Accu (direkt)", addrVal))
 			return nil
 		}
 
@@ -257,11 +260,11 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 
 	case *ast.OutStmt:
 		// OUT Port, Value (Hardware Port 2 = OUT Register)
-		if numPort, ok := s.Port.(*ast.NumberLiteral); ok {
+		if portVal, ok := evalConstExpr(s.Port); ok {
 			if err := g.compileExpr(s.Value); err != nil {
 				return err
 			}
-			g.emit(OpSTAM, uint16(numPort.Value&0xFFFF), fmt.Sprintf("OUT Port %d = Accu (direkt)", numPort.Value))
+			g.emit(OpSTAM, uint16(portVal&0xFFFF), fmt.Sprintf("OUT Port %d = Accu (direkt)", portVal))
 			return nil
 		}
 		if err := g.compileExpr(s.Value); err != nil {
@@ -464,12 +467,13 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 }
 
 func (g *CodeGenerator) compileIf(s *ast.IfStmt) error {
-	// Bedingung in Accu auswerten: 0 = false, != 0 = true
-	if err := g.compileExpr(s.Condition); err != nil {
-		return err
+	// Spezialfall: IF <Condition> THEN GOTO <Target> (ohne ELSE) -> Direkter Bedingungssprung ohne Umwege!
+	if len(s.ElseBranch) == 0 && len(s.ThenBranch) == 1 {
+		if gotoStmt, ok := s.ThenBranch[0].(*ast.GotoStmt); ok {
+			return g.compileIfGoto(s.Condition, gotoStmt.Target, gotoStmt.Line)
+		}
 	}
 
-	// Wenn Accu == 0 (false), springe zu Else / EndIf
 	elseLabel := fmt.Sprintf("__else_%d", g.pc)
 	endIfLabel := fmt.Sprintf("__endif_%d", g.pc)
 
@@ -478,8 +482,10 @@ func (g *CodeGenerator) compileIf(s *ast.IfStmt) error {
 		targetFalse = endIfLabel
 	}
 
-	g.emit(OpBZ, 0, "IF False -> Skip")
-	g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: targetFalse})
+	// Bedingung direkt als Sprung auf targetFalse übersetzen (spart Materialisierung von 0/1 in Accu)
+	if err := g.compileIfCondition(s.Condition, targetFalse); err != nil {
+		return err
+	}
 
 	// THEN Zweig
 	for _, tStmt := range s.ThenBranch {
@@ -505,6 +511,221 @@ func (g *CodeGenerator) compileIf(s *ast.IfStmt) error {
 	return nil
 }
 
+// compileIfGoto optimiert "IF <cond> THEN GOTO <target>" zu einem direkten Sprung ohne Zwischenlabels.
+func (g *CodeGenerator) compileIfGoto(cond ast.Expr, target string, line int) error {
+	if val, ok := evalConstExpr(cond); ok {
+		if (val & 0xFFFF) != 0 {
+			g.emit(OpBA, 0, fmt.Sprintf("IF Konstante != 0 -> GOTO %s", target))
+			g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: target, line: line})
+		}
+		return nil
+	}
+
+	if bin, ok := cond.(*ast.BinaryExpr); ok {
+		branchOp, trueOnBranch, isComp, err := g.emitComparisonDiff(bin)
+		if err != nil {
+			return err
+		}
+		if isComp {
+			if trueOnBranch {
+				g.emit(branchOp, 0, fmt.Sprintf("IF %s -> GOTO %s (direkt)", bin.Op, target))
+				g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: target, line: line})
+				return nil
+			}
+			skipLabel := fmt.Sprintf("__if_skip_%d", g.pc)
+			g.emit(branchOp, 0, fmt.Sprintf("IF NOT (%s) -> Skip GOTO", bin.Op))
+			g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: skipLabel})
+			g.emit(OpBA, 0, fmt.Sprintf("GOTO %s", target))
+			g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: target, line: line})
+			g.labels[skipLabel] = g.pc
+			return nil
+		}
+	}
+
+	skipLabel := fmt.Sprintf("__if_skip_%d", g.pc)
+	if err := g.compileExpr(cond); err != nil {
+		return err
+	}
+	g.emit(OpBZ, 0, "IF False -> Skip GOTO")
+	g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: skipLabel})
+	g.emit(OpBA, 0, fmt.Sprintf("GOTO %s", target))
+	g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: target, line: line})
+	g.labels[skipLabel] = g.pc
+	return nil
+}
+
+// compileIfCondition wertet cond aus und springt direkt zu targetFalse, wenn die Bedingung nicht erfüllt ist.
+func (g *CodeGenerator) compileIfCondition(cond ast.Expr, targetFalse string) error {
+	if val, ok := evalConstExpr(cond); ok {
+		if (val & 0xFFFF) == 0 {
+			g.emit(OpBA, 0, "IF Konstante 0 -> Skip")
+			g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: targetFalse})
+		}
+		return nil
+	}
+
+	if bin, ok := cond.(*ast.BinaryExpr); ok {
+		branchOp, trueOnBranch, isComp, err := g.emitComparisonDiff(bin)
+		if err != nil {
+			return err
+		}
+		if isComp {
+			if !trueOnBranch {
+				// Branch-Opcode feuert genau dann, wenn die Bedingung FALSE ist (z.B. >=, <=, <>)
+				g.emit(branchOp, 0, fmt.Sprintf("IF False (%s) -> Skip", bin.Op))
+				g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: targetFalse})
+				return nil
+			}
+			// Branch-Opcode feuert wenn Bedingung TRUE ist (z.B. =, <, >) -> überspringe BA targetFalse
+			thenStartLabel := fmt.Sprintf("__then_%d", g.pc)
+			g.emit(branchOp, 0, fmt.Sprintf("IF True (%s) -> Then", bin.Op))
+			g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: thenStartLabel})
+			g.emit(OpBA, 0, "IF False -> Skip")
+			g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: targetFalse})
+			g.labels[thenStartLabel] = g.pc
+			return nil
+		}
+	}
+
+	if err := g.compileExpr(cond); err != nil {
+		return err
+	}
+	g.emit(OpBZ, 0, "IF False -> Skip")
+	g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: targetFalse})
+	return nil
+}
+
+// emitComparisonDiff berechnet für Vergleichsoperatoren (=, <>, <, >=, >, <=) die Differenz im Accu
+// und gibt den zugehörigen Branch-Opcode (OpBZ / OpBN) sowie trueOnBranch zurück.
+func (g *CodeGenerator) emitComparisonDiff(e *ast.BinaryExpr) (branchOp uint16, trueOnBranch bool, isComp bool, err error) {
+	op := strings.ToUpper(e.Op)
+	reverse := false
+	switch op {
+	case "=", "==":
+		branchOp = OpBZ
+		trueOnBranch = true
+	case "<>", "!=":
+		branchOp = OpBZ
+		trueOnBranch = false
+	case "<":
+		branchOp = OpBN
+		trueOnBranch = true
+	case ">=":
+		branchOp = OpBN
+		trueOnBranch = false
+	case ">":
+		branchOp = OpBN
+		trueOnBranch = true
+		reverse = true
+	case "<=":
+		branchOp = OpBN
+		trueOnBranch = false
+		reverse = true
+	default:
+		return 0, false, false, nil
+	}
+
+	// Fall 1: Rechter Operand ist eine Konstante (z.B. X > 64, ZX < 0, I = 15)
+	if rVal, ok := evalConstExpr(e.Right); ok {
+		if err := g.compileExpr(e.Left); err != nil {
+			return 0, false, true, err
+		}
+		if !reverse {
+			// Berechne Left - rVal = Left + (-rVal)
+			if (rVal & 0xFFFF) != 0 {
+				g.emit(OpADD, uint16((-rVal)&0xFFFF), fmt.Sprintf("Vergleich Accu - %d", rVal))
+			}
+		} else {
+			// Berechne rVal - Left = ~Left + (rVal + 1)
+			g.emit(OpNOT, 0, "~Left")
+			if ((rVal + 1) & 0xFFFF) != 0 {
+				g.emit(OpADD, uint16((rVal+1)&0xFFFF), fmt.Sprintf("~Left + %d (%d - Left)", rVal+1, rVal))
+			}
+		}
+		return branchOp, trueOnBranch, true, nil
+	}
+
+	// Fall 2: Linker Operand ist eine Konstante (z.B. 0 < X)
+	if lVal, ok := evalConstExpr(e.Left); ok {
+		if err := g.compileExpr(e.Right); err != nil {
+			return 0, false, true, err
+		}
+		if !reverse {
+			// Berechne lVal - Right = ~Right + (lVal + 1)
+			g.emit(OpNOT, 0, "~Right")
+			if ((lVal + 1) & 0xFFFF) != 0 {
+				g.emit(OpADD, uint16((lVal+1)&0xFFFF), fmt.Sprintf("~Right + %d (%d - Right)", lVal+1, lVal))
+			}
+		} else {
+			// Berechne Right - lVal = Right + (-lVal)
+			if (lVal & 0xFFFF) != 0 {
+				g.emit(OpADD, uint16((-lVal)&0xFFFF), fmt.Sprintf("Vergleich Accu - %d", lVal))
+			}
+		}
+		return branchOp, trueOnBranch, true, nil
+	}
+
+	// Fall 3: Rechter Operand ist eine einfache Variable (spart Temp-Allokation!)
+	if vRight, ok := e.Right.(*ast.VariableExpr); ok {
+		vAddr := g.getOrCreateVar(vRight.Name)
+		if !reverse {
+			// Berechne Left - vRight
+			g.emit(OpLDAM, vAddr, fmt.Sprintf("Lade %s", vRight.Name))
+			g.emit(OpNOT, 0, fmt.Sprintf("~%s", vRight.Name))
+			g.emit(OpADD, 1, fmt.Sprintf("-%s", vRight.Name))
+			patchAddr := g.pc + 5
+			g.emit(OpSTAM, patchAddr, "Patch Vergleichs-ADD")
+			if err := g.compileExpr(e.Left); err != nil {
+				return 0, false, true, err
+			}
+			g.emit(OpADD, 0, fmt.Sprintf("Left - %s", vRight.Name))
+		} else {
+			// Berechne vRight - Left
+			if err := g.compileExpr(e.Left); err != nil {
+				return 0, false, true, err
+			}
+			g.emit(OpNOT, 0, "~Left")
+			g.emit(OpADD, 1, "-Left")
+			patchAddr := g.pc + 5
+			g.emit(OpSTAM, patchAddr, "Patch Vergleichs-ADD")
+			g.emit(OpLDAM, vAddr, fmt.Sprintf("Lade %s", vRight.Name))
+			g.emit(OpADD, 0, fmt.Sprintf("%s - Left", vRight.Name))
+		}
+		return branchOp, trueOnBranch, true, nil
+	}
+
+	// Fall 4: Allgemeine Ausdrücke Left und Right
+	if err := g.compileExpr(e.Right); err != nil {
+		return 0, false, true, err
+	}
+	tempRight := g.allocTemp()
+	g.emit(OpSTAM, tempRight, "Rechter Vergleichsoperand")
+
+	if err := g.compileExpr(e.Left); err != nil {
+		return 0, false, true, err
+	}
+
+	if !reverse {
+		tempA := g.allocTemp()
+		g.emit(OpSTAM, tempA, "Sichere A")
+		g.emit(OpLDAM, tempRight, "Lade B")
+		g.emit(OpNOT, 0, "~B")
+		g.emit(OpADD, 1, "-B")
+		patchAddr := g.pc + 5
+		g.emit(OpSTAM, patchAddr, "Patch -B")
+		g.emit(OpLDAM, tempA, "Lade A")
+		g.emit(OpADD, 0, "A - B")
+	} else {
+		g.emit(OpNOT, 0, "~A")
+		g.emit(OpADD, 1, "-A")
+		patchAddr := g.pc + 5
+		g.emit(OpSTAM, patchAddr, "Patch -A")
+		g.emit(OpLDAM, tempRight, "Lade B")
+		g.emit(OpADD, 0, "B - A")
+	}
+	return branchOp, trueOnBranch, true, nil
+}
+
 func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
 	varAddr := g.getOrCreateVar(s.VarName)
 
@@ -514,21 +735,41 @@ func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
 	}
 	g.emit(OpSTAM, varAddr, fmt.Sprintf("FOR %s Startwert", s.VarName))
 
-	// Spezialfall: Konstanter Endwert (z.B. FOR I = 1 TO 31)
-	if numEnd, ok := s.End.(*ast.NumberLiteral); ok {
+	// Ermittle Schrittweite (Standard: +1, unterstützt auch negative Konstanten wie STEP -1)
+	stepVal := 1
+	if s.Step != nil {
+		if val, ok := evalConstExpr(s.Step); ok {
+			stepVal = val
+		} else if num, ok := s.Step.(*ast.NumberLiteral); ok {
+			stepVal = num.Value
+		}
+	}
+
+	// Spezialfall: Konstanter Endwert (z.B. FOR I = 1 TO 31 oder FOR Y = 31 TO 0 STEP -1)
+	if endVal, ok := evalConstExpr(s.End); ok {
 		loopStartPC := g.pc
 		loopStartLabel := fmt.Sprintf("__for_start_%s_%d", s.VarName, loopStartPC)
 		loopEndLabel := fmt.Sprintf("__for_end_%s_%d", s.VarName, loopStartPC)
 		g.labels[loopStartLabel] = loopStartPC
 
-		// Schleifenbedingung: Var <= EndVal -> EndVal - Var >= 0
-		// EndVal - Var = ~Var + (EndVal + 1)
-		// Wenn Negativ (Bit 15 gesetzt) -> Schleife beenden (Var > EndVal)
-		g.emit(OpLDAM, varAddr, "Pruefe FOR Limit (optimiert)")
-		g.emit(OpNOT, 0, "~Var")
-		g.emit(OpADD, uint16((numEnd.Value+1)&0xFFFF), fmt.Sprintf("~Var + %d (Endwert-Check)", numEnd.Value+1))
-		g.emit(OpBN, 0, "FOR Beenden wenn Var > End")
-		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopEndLabel})
+		if stepVal >= 0 {
+			// Aufwärts zählen: Bedingung Var <= endVal -> endVal - Var >= 0 (~Var + endVal + 1)
+			g.emit(OpLDAM, varAddr, "Pruefe FOR Limit (optimiert)")
+			g.emit(OpNOT, 0, "~Var")
+			if ((endVal + 1) & 0xFFFF) != 0 {
+				g.emit(OpADD, uint16((endVal+1)&0xFFFF), fmt.Sprintf("~Var + %d (Endwert-Check)", endVal+1))
+			}
+			g.emit(OpBN, 0, "FOR Beenden wenn Var > End")
+			g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopEndLabel})
+		} else {
+			// Abwärts zählen (stepVal < 0): Bedingung Var >= endVal -> Var - endVal >= 0
+			g.emit(OpLDAM, varAddr, "Pruefe FOR Limit abwaerts (optimiert)")
+			if (endVal & 0xFFFF) != 0 {
+				g.emit(OpADD, uint16((-endVal)&0xFFFF), fmt.Sprintf("Var - %d (Endwert-Check)", endVal))
+			}
+			g.emit(OpBN, 0, "FOR Beenden wenn Var < End")
+			g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopEndLabel})
+		}
 
 		// Schleifenrumpf (Body)
 		for _, bStmt := range s.Body {
@@ -537,11 +778,7 @@ func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
 			}
 		}
 
-		// Schrittweite addieren (Inkrement): Var = Var + Step
-		stepVal := 1
-		if num, ok := s.Step.(*ast.NumberLiteral); ok {
-			stepVal = num.Value
-		}
+		// Schrittweite addieren: Var = Var + Step
 		g.emit(OpLDAM, varAddr, "Lade Zaehler")
 		g.emit(OpADD, uint16(stepVal&0xFFFF), fmt.Sprintf("Zaehler + %d", stepVal))
 		g.emit(OpSTAM, varAddr, "Speichere Zaehler")
@@ -554,11 +791,12 @@ func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
 		return nil
 	}
 
-	// Dynamischer Endwert:
+	// Dynamischer Endwert: Eigene Symbol-Zelle statt flüchtigem allocTemp() verwenden,
+	// damit komplexe Ausdrücke im Schleifenrumpf niemals das Schleifenlimit überschreiben!
 	if err := g.compileExpr(s.End); err != nil {
 		return err
 	}
-	endAddr := g.allocTemp()
+	endAddr := g.getOrCreateVar(fmt.Sprintf("__for_limit_%s", s.VarName))
 	g.emit(OpSTAM, endAddr, fmt.Sprintf("FOR %s Endwert", s.VarName))
 
 	loopStartPC := g.pc
@@ -566,19 +804,29 @@ func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
 	loopEndLabel := fmt.Sprintf("__for_end_%s_%d", s.VarName, loopStartPC)
 	g.labels[loopStartLabel] = loopStartPC
 
-	// 3. Schleifenbedingung: Var <= End
-	// Berechne End - Var >= 0
-	// 2er Komplement von Var: ~Var + 1
-	g.emit(OpLDAM, varAddr, "Pruefe FOR Limit")
-	g.emit(OpNOT, 0, "~Var")
-	g.emit(OpADD, 1, "~Var + 1")
-	patchAddr := g.pc + 5
-	g.emit(OpSTAM, patchAddr, "Patch Limit Addition")
-	g.emit(OpLDAM, endAddr, "Lade Endwert")
-	g.emit(OpADD, 0, "Endwert - Var")
-	// Wenn Negativ (Bit 15 gesetzt) -> Schleife beenden
-	g.emit(OpBN, 0, "FOR Beenden wenn Var > End")
-	g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopEndLabel})
+	if stepVal >= 0 {
+		// 3a. Schleifenbedingung aufwärts: Var <= End (End - Var >= 0)
+		g.emit(OpLDAM, varAddr, "Pruefe FOR Limit")
+		g.emit(OpNOT, 0, "~Var")
+		g.emit(OpADD, 1, "~Var + 1")
+		patchAddr := g.pc + 5
+		g.emit(OpSTAM, patchAddr, "Patch Limit Addition")
+		g.emit(OpLDAM, endAddr, "Lade Endwert")
+		g.emit(OpADD, 0, "Endwert - Var")
+		g.emit(OpBN, 0, "FOR Beenden wenn Var > End")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopEndLabel})
+	} else {
+		// 3b. Schleifenbedingung abwärts: Var >= End (Var - End >= 0)
+		g.emit(OpLDAM, endAddr, "Lade Endwert")
+		g.emit(OpNOT, 0, "~End")
+		g.emit(OpADD, 1, "~End + 1")
+		patchAddr := g.pc + 5
+		g.emit(OpSTAM, patchAddr, "Patch Limit Subtraktion")
+		g.emit(OpLDAM, varAddr, "Lade Zaehler")
+		g.emit(OpADD, 0, "Var - Endwert")
+		g.emit(OpBN, 0, "FOR Beenden wenn Var < End")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopEndLabel})
+	}
 
 	// 4. Schleifenrumpf (Body)
 	for _, bStmt := range s.Body {
@@ -588,12 +836,8 @@ func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
 	}
 
 	// 5. Schrittweite addieren (Inkrement): Var = Var + Step
-	stepVal := 1
-	if num, ok := s.Step.(*ast.NumberLiteral); ok {
-		stepVal = num.Value
-	}
 	g.emit(OpLDAM, varAddr, "Lade Zaehler")
-	g.emit(OpADD, uint16(stepVal), fmt.Sprintf("Zaehler + %d", stepVal))
+	g.emit(OpADD, uint16(stepVal&0xFFFF), fmt.Sprintf("Zaehler + %d", stepVal))
 	g.emit(OpSTAM, varAddr, "Speichere Zaehler")
 
 	// Sprung zurück zum Schleifenanfang
@@ -623,13 +867,49 @@ func (g *CodeGenerator) compileRead(s *ast.ReadStmt) error {
 }
 
 // ============================================================================
+// COMPILE-TIME CONSTANT FOLDING
+// ============================================================================
+
+// evalConstExpr wertet Zahlenliterale sowie unäre Konstanten (z.B. -47, -1, NOT 0)
+// direkt zur Compile-Zeit aus, damit negative Literale als echte Konstanten erkannt werden.
+func evalConstExpr(expr ast.Expr) (int, bool) {
+	if expr == nil {
+		return 0, false
+	}
+	switch e := expr.(type) {
+	case *ast.NumberLiteral:
+		return e.Value, true
+	case *ast.UnaryExpr:
+		val, ok := evalConstExpr(e.Right)
+		if !ok {
+			return 0, false
+		}
+		switch strings.ToUpper(e.Op) {
+		case "-":
+			return -val, true
+		case "NOT":
+			return int(int16(^uint16(val & 0xFFFF))), true
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
+}
+
+// ============================================================================
 // AUSDRÜCKE (EXPRESSIONS) IN ACCU KOMPILIEREN
 // ============================================================================
 
 func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
+	// Compile-Time Constant Folding (z.B. -47, 10 + 20, 1 SHL 8)
+	if val, ok := evalConstExpr(expr); ok {
+		g.emit(OpLDA, uint16(val&0xFFFF), fmt.Sprintf("Konstante %d", val))
+		return nil
+	}
+
 	switch e := expr.(type) {
 	case *ast.NumberLiteral:
-		g.emit(OpLDA, uint16(e.Value), fmt.Sprintf("Konstante %d", e.Value))
+		g.emit(OpLDA, uint16(e.Value&0xFFFF), fmt.Sprintf("Konstante %d", e.Value))
 		return nil
 
 	case *ast.VariableExpr:
@@ -655,8 +935,8 @@ func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
 
 	case *ast.PeekExpr:
 		// Spezialfall: Konstante Adresse (z.B. PEEK(3))
-		if numAddr, ok := e.Address.(*ast.NumberLiteral); ok {
-			g.emit(OpLDAM, uint16(numAddr.Value&0xFFFF), fmt.Sprintf("PEEK([%d]) direkt", numAddr.Value))
+		if addrVal, ok := evalConstExpr(e.Address); ok {
+			g.emit(OpLDAM, uint16(addrVal&0xFFFF), fmt.Sprintf("PEEK([%d]) direkt", addrVal))
 			return nil
 		}
 		if err := g.compileExpr(e.Address); err != nil {
@@ -695,54 +975,57 @@ func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
 func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 	op := strings.ToUpper(e.Op)
 
+	rConstVal, rIsConst := evalConstExpr(e.Right)
+	lConstVal, lIsConst := evalConstExpr(e.Left)
+
 	// Spezialfall: Multiplikation (*)
 	if op == "*" {
 		// Optimierung: Multiplikation mit 0
-		if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value == 0 {
+		if rIsConst && rConstVal == 0 {
 			g.emit(OpLDA, 0, "Accu = 0 (* 0)")
 			return nil
 		}
-		if num, ok := e.Left.(*ast.NumberLiteral); ok && num.Value == 0 {
+		if lIsConst && lConstVal == 0 {
 			g.emit(OpLDA, 0, "Accu = 0 (0 *)")
 			return nil
 		}
 
 		// Optimierung: Multiplikation mit 1
-		if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value == 1 {
+		if rIsConst && rConstVal == 1 {
 			return g.compileExpr(e.Left)
 		}
-		if num, ok := e.Left.(*ast.NumberLiteral); ok && num.Value == 1 {
+		if lIsConst && lConstVal == 1 {
 			return g.compileExpr(e.Right)
 		}
 
 		// Optimierung: Multiplikation mit Zweierpotenz (2, 4, 8, 16, 32, ...) per Hardware-Linksshift SHL
-		if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value > 0 && (num.Value&(num.Value-1)) == 0 && num.Value <= 32768 {
+		if rIsConst && rConstVal > 0 && (rConstVal&(rConstVal-1)) == 0 && rConstVal <= 32768 {
 			if err := g.compileExpr(e.Left); err != nil {
 				return err
 			}
 			shifts := 0
-			val := num.Value
+			val := rConstVal
 			for val > 1 {
 				val >>= 1
 				shifts++
 			}
 			for s := 0; s < shifts; s++ {
-				g.emit(OpSHL, 0, fmt.Sprintf("SHL Linksshift (*%d, %d/%d)", num.Value, s+1, shifts))
+				g.emit(OpSHL, 0, fmt.Sprintf("SHL Linksshift (*%d, %d/%d)", rConstVal, s+1, shifts))
 			}
 			return nil
 		}
-		if num, ok := e.Left.(*ast.NumberLiteral); ok && num.Value > 0 && (num.Value&(num.Value-1)) == 0 && num.Value <= 32768 {
+		if lIsConst && lConstVal > 0 && (lConstVal&(lConstVal-1)) == 0 && lConstVal <= 32768 {
 			if err := g.compileExpr(e.Right); err != nil {
 				return err
 			}
 			shifts := 0
-			val := num.Value
+			val := lConstVal
 			for val > 1 {
 				val >>= 1
 				shifts++
 			}
 			for s := 0; s < shifts; s++ {
-				g.emit(OpSHL, 0, fmt.Sprintf("SHL Linksshift (*%d, %d/%d)", num.Value, s+1, shifts))
+				g.emit(OpSHL, 0, fmt.Sprintf("SHL Linksshift (*%d, %d/%d)", lConstVal, s+1, shifts))
 			}
 			return nil
 		}
@@ -752,6 +1035,16 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 			return err
 		}
 		g.emit(OpSTAM, g.getOrCreateVar("__r0"), "Multiplikand __r0")
+
+		// Spezialfall: Quadrieren derselben Variable (z.B. X2 * X2) -> Accu direkt auch in __r1 speichern!
+		if vL, okL := e.Left.(*ast.VariableExpr); okL {
+			if vR, okR := e.Right.(*ast.VariableExpr); okR && strings.EqualFold(vL.Name, vR.Name) {
+				g.emit(OpSTAM, g.getOrCreateVar("__r1"), "Multiplikator __r1 (Quadrat)")
+				g.emit(OpCALL, 0, "CALL __mul")
+				g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_mul"})
+				return nil
+			}
+		}
 
 		if err := g.compileExpr(e.Right); err != nil {
 			return err
@@ -766,49 +1059,41 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 	// Spezialfall: Division (/) oder Modulo (MOD)
 	if op == "/" || op == "MOD" {
 		// Optimierung: Division durch 1
-		if op == "/" {
-			if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value == 1 {
-				return g.compileExpr(e.Left)
-			}
+		if op == "/" && rIsConst && rConstVal == 1 {
+			return g.compileExpr(e.Left)
 		}
 
 		// Optimierung: Modulo 1 -> immer 0
-		if op == "MOD" {
-			if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value == 1 {
-				g.emit(OpLDA, 0, "Accu = 0 (MOD 1)")
-				return nil
-			}
+		if op == "MOD" && rIsConst && rConstVal == 1 {
+			g.emit(OpLDA, 0, "Accu = 0 (MOD 1)")
+			return nil
 		}
 
 		// Optimierung: Division durch Zweierpotenz (2, 4, 8, 16, 32, 64, ...) per Hardware-Rechtsshift SHR
-		if op == "/" {
-			if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value > 0 && (num.Value&(num.Value-1)) == 0 && num.Value <= 32768 {
-				if err := g.compileExpr(e.Left); err != nil {
-					return err
-				}
-				shifts := 0
-				val := num.Value
-				for val > 1 {
-					val >>= 1
-					shifts++
-				}
-				for s := 0; s < shifts; s++ {
-					g.emit(OpSHR, 0, fmt.Sprintf("SHR Rechtsshift (/%d, %d/%d)", num.Value, s+1, shifts))
-				}
-				return nil
+		if op == "/" && rIsConst && rConstVal > 0 && (rConstVal&(rConstVal-1)) == 0 && rConstVal <= 32768 {
+			if err := g.compileExpr(e.Left); err != nil {
+				return err
 			}
+			shifts := 0
+			val := rConstVal
+			for val > 1 {
+				val >>= 1
+				shifts++
+			}
+			for s := 0; s < shifts; s++ {
+				g.emit(OpSHR, 0, fmt.Sprintf("SHR Rechtsshift (/%d, %d/%d)", rConstVal, s+1, shifts))
+			}
+			return nil
 		}
 
 		// Optimierung: Modulo durch Zweierpotenz (2, 4, 8, 16, 32, 64, ...) per Bitmaske AND (value - 1)
-		if op == "MOD" {
-			if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value > 0 && (num.Value&(num.Value-1)) == 0 && num.Value <= 32768 {
-				if err := g.compileExpr(e.Left); err != nil {
-					return err
-				}
-				mask := uint16((num.Value - 1) & 0xFFFF)
-				g.emit(OpAND, mask, fmt.Sprintf("Accu AND 0x%04X (MOD %d)", mask, num.Value))
-				return nil
+		if op == "MOD" && rIsConst && rConstVal > 0 && (rConstVal&(rConstVal-1)) == 0 && rConstVal <= 32768 {
+			if err := g.compileExpr(e.Left); err != nil {
+				return err
 			}
+			mask := uint16((rConstVal - 1) & 0xFFFF)
+			g.emit(OpAND, mask, fmt.Sprintf("Accu AND 0x%04X (MOD %d)", mask, rConstVal))
+			return nil
 		}
 
 		g.needDiv = true
@@ -831,31 +1116,35 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 		return nil
 	}
 
-	// Schnelle Optimierung für unmittelbare Zahlenkonstanten (+, -, AND, OR)
-	if num, ok := e.Right.(*ast.NumberLiteral); ok {
+	// Schnelle Optimierung für unmittelbare Zahlenkonstanten (+, -, AND, OR, XOR, SHR, SHL)
+	if rIsConst {
 		if op == "+" {
 			if err := g.compileExpr(e.Left); err != nil {
 				return err
 			}
-			g.emit(OpADD, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu + %d", num.Value))
+			if (rConstVal & 0xFFFF) != 0 {
+				g.emit(OpADD, uint16(rConstVal&0xFFFF), fmt.Sprintf("Accu + %d", rConstVal))
+			}
 			return nil
 		} else if op == "-" {
 			if err := g.compileExpr(e.Left); err != nil {
 				return err
 			}
-			g.emit(OpADD, uint16((-num.Value)&0xFFFF), fmt.Sprintf("Accu - %d", num.Value))
+			if (rConstVal & 0xFFFF) != 0 {
+				g.emit(OpADD, uint16((-rConstVal)&0xFFFF), fmt.Sprintf("Accu - %d", rConstVal))
+			}
 			return nil
 		} else if op == "AND" {
 			if err := g.compileExpr(e.Left); err != nil {
 				return err
 			}
-			g.emit(OpAND, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu AND 0x%04X", num.Value))
+			g.emit(OpAND, uint16(rConstVal&0xFFFF), fmt.Sprintf("Accu AND 0x%04X", rConstVal))
 			return nil
 		} else if op == "OR" {
 			if err := g.compileExpr(e.Left); err != nil {
 				return err
 			}
-			g.emit(OpOR, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu OR 0x%04X", num.Value))
+			g.emit(OpOR, uint16(rConstVal&0xFFFF), fmt.Sprintf("Accu OR 0x%04X", rConstVal))
 			return nil
 		} else if op == "XOR" {
 			if err := g.compileExpr(e.Left); err != nil {
@@ -863,11 +1152,11 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 			}
 			tempA := g.allocTemp()
 			g.emit(OpSTAM, tempA, "Temp A sichern")
-			g.emit(OpOR, uint16(num.Value&0xFFFF), "A OR B")
+			g.emit(OpOR, uint16(rConstVal&0xFFFF), "A OR B")
 			tempOr := g.allocTemp()
 			g.emit(OpSTAM, tempOr, "Temp (A OR B) sichern")
 			g.emit(OpLDAM, tempA, "Lade A")
-			g.emit(OpAND, uint16(num.Value&0xFFFF), "A AND B")
+			g.emit(OpAND, uint16(rConstVal&0xFFFF), "A AND B")
 			g.emit(OpNOT, 0, "NOT (A AND B)")
 			patchAnd := g.pc + 5
 			g.emit(OpSTAM, patchAnd, "Patch AND")
@@ -878,7 +1167,7 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 			if err := g.compileExpr(e.Left); err != nil {
 				return err
 			}
-			shifts := num.Value
+			shifts := rConstVal
 			if shifts <= 0 {
 				shifts = 1
 			}
@@ -890,7 +1179,7 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 			if err := g.compileExpr(e.Left); err != nil {
 				return err
 			}
-			shifts := num.Value
+			shifts := rConstVal
 			if shifts <= 0 {
 				shifts = 1
 			}
@@ -901,33 +1190,37 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 		}
 	}
 
-	// Schnelle Optimierung: Linke Seite ist eine Zahlenkonstante (z.B. 10 + X oder 10 - X)
-	if num, ok := e.Left.(*ast.NumberLiteral); ok {
+	// Schnelle Optimierung: Linke Seite ist eine Zahlenkonstante (z.B. 10 + X oder 1 - S)
+	if lIsConst {
 		if op == "+" {
 			if err := g.compileExpr(e.Right); err != nil {
 				return err
 			}
-			g.emit(OpADD, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu + %d", num.Value))
+			if (lConstVal & 0xFFFF) != 0 {
+				g.emit(OpADD, uint16(lConstVal&0xFFFF), fmt.Sprintf("Accu + %d", lConstVal))
+			}
 			return nil
 		} else if op == "-" {
-			// num - Right = ~Right + (num + 1)
+			// lConstVal - Right = ~Right + (lConstVal + 1)
 			if err := g.compileExpr(e.Right); err != nil {
 				return err
 			}
 			g.emit(OpNOT, 0, "~Right")
-			g.emit(OpADD, uint16((num.Value+1)&0xFFFF), fmt.Sprintf("~Right + %d (%d - Right)", num.Value+1, num.Value))
+			if ((lConstVal + 1) & 0xFFFF) != 0 {
+				g.emit(OpADD, uint16((lConstVal+1)&0xFFFF), fmt.Sprintf("~Right + %d (%d - Right)", lConstVal+1, lConstVal))
+			}
 			return nil
 		} else if op == "AND" {
 			if err := g.compileExpr(e.Right); err != nil {
 				return err
 			}
-			g.emit(OpAND, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu AND 0x%04X", num.Value))
+			g.emit(OpAND, uint16(lConstVal&0xFFFF), fmt.Sprintf("Accu AND 0x%04X", lConstVal))
 			return nil
 		} else if op == "OR" {
 			if err := g.compileExpr(e.Right); err != nil {
 				return err
 			}
-			g.emit(OpOR, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu OR 0x%04X", num.Value))
+			g.emit(OpOR, uint16(lConstVal&0xFFFF), fmt.Sprintf("Accu OR 0x%04X", lConstVal))
 			return nil
 		}
 	}
@@ -1177,14 +1470,14 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emit(OpLDA, 0, "__mul: Initialisiere Produkt = 0")
 		g.emit(OpSTAM, prodAddr, "prod = 0")
 
-		loopPC := g.pc
-		g.labels["__mul_loop"] = loopPC
-
 		g.emit(OpLDAM, r1Addr, "__mul: Lade Faktor 2")
 		g.emit(OpBZ, 0, "__mul: Wenn Faktor 2 == 0 -> Fertig")
 		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__mul_done"})
 
-		// Prüfe LSB(r1) mit BE (Even)
+		loopPC := g.pc
+		g.labels["__mul_loop"] = loopPC
+
+		// Accu hält bereits r1: Prüfe LSB(r1) mit BE (Even)
 		g.emit(OpBE, 0, "__mul: Wenn Even -> Skip Addition")
 		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__mul_skip_add"})
 
@@ -1197,14 +1490,16 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emit(OpSTAM, prodAddr, "Aktualisiere prod")
 
 		g.labels["__mul_skip_add"] = g.pc
-		// Shift r0 links, r1 rechts
+		// Shift r0 links, danach r1 rechts (damit Accu beim Rücksprung bereits r1 hält!)
 		g.emit(OpLDAM, r0Addr, "Shift r0 links")
 		g.emit(OpSHL, 0, "r0 << 1")
 		g.emit(OpSTAM, r0Addr, "Speichere r0")
 
 		g.emit(OpLDAM, r1Addr, "Shift r1 rechts")
 		g.emit(OpSHR, 0, "r1 >> 1")
-		g.emit(OpSTAM, r1Addr, "Speichere r1")
+		g.emit(OpBZ, 0, "__mul: Wenn r1 == 0 -> Fertig")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__mul_done"})
+		g.emit(OpSTAM, r1Addr, "Speichere r1 (Accu bleibt r1)")
 
 		g.emit(OpBA, loopPC, "Loop __mul")
 
@@ -1563,23 +1858,9 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emit(OpLDAM, currWordAddr, "Lade geändertes Wort")
 		g.emit(OpSTAMM, wordAddr, "Schreibe Pixelwort in Display via STAMM")
 		g.emitSingle(OpRET, "RETURN __pset")
-
-		// 6. Masken-Tabelle einbetten (16 Worte für Bits 15 bis 0)
-		g.labels["__pset_mask_table"] = g.pc
-		masks := []uint16{
-			0x8000, 0x4000, 0x2000, 0x1000,
-			0x0800, 0x0400, 0x0200, 0x0100,
-			0x0080, 0x0040, 0x0020, 0x0010,
-			0x0008, 0x0004, 0x0002, 0x0001,
-		}
-		for i, m := range masks {
-			g.memory[g.pc] = m
-			g.comments[g.pc] = fmt.Sprintf("Maske fuer Bit %d", 15-i)
-			g.pc++
-		}
 	}
 
-	// 5. Bresenham Linie zeichnen __line (LINE X1, Y1 TO X2, Y2, Color)
+	// 5. Bresenham Linie zeichnen __line (LINE X1, Y1 TO X2, Y2, Color) mit O(1) Bitmasken-Tabelle & STAMM
 	if g.needLine {
 		g.labels["__runtime_line"] = g.pc
 		x1Addr := g.getOrCreateVar("__line_x1")
@@ -1597,7 +1878,7 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 
 		wordAddr := g.getOrCreateVar("__line_word_addr")
 		maskAddr := g.getOrCreateVar("__line_mask")
-		countAddr := g.getOrCreateVar("__line_count")
+		maskPtrAddr := g.getOrCreateVar("__pset_mask_ptr")
 		currWordAddr := g.getOrCreateVar("__line_curr_word")
 
 		// 1. Berechne dx und sx:
@@ -1696,35 +1977,17 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 
 		g.labels[lineWordReadyLabel] = g.pc
 
-		// Bitmaske = 0x8000 >> (x1 & 15)
-		g.emit(OpLDA, 0x8000, "Init Maske = 0x8000")
-		g.emit(OpSTAM, maskAddr, "Speichere Startmaske")
+		// Bitmaske aus 16-Wort-Tabelle per LDAMM laden (O(1) statt langsamer Shift-Schleife!)
 		g.emit(OpLDAM, x1Addr, "Lade x1")
-		g.emit(OpAND, 0x000F, "x1 & 15")
-		g.emit(OpSTAM, countAddr, "Speichere Shift-Count")
-
-		maskLoopPC := g.pc
-		lineMaskLoopLabel := fmt.Sprintf("__line_mask_loop_%d", maskLoopPC)
-		lineMaskReadyLabel := fmt.Sprintf("__line_mask_ready_%d", maskLoopPC)
-		g.labels[lineMaskLoopLabel] = maskLoopPC
-
-		g.emit(OpLDAM, countAddr, "Lade Shift-Count")
-		g.emit(OpBZ, 0, "Fertig wenn Count == 0")
-		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: lineMaskReadyLabel})
-		g.emit(OpADD, 0xFFFF, "Count - 1")
-		g.emit(OpSTAM, countAddr, "Speichere Count")
-		g.emit(OpLDAM, maskAddr, "Lade Maske")
-		g.emit(OpSHR, 0, "Maske >> 1")
+		g.emit(OpAND, 0x000F, "x1 & 15 (Bit-Index)")
+		g.emit(OpADD, 0, "Addiere Tabellenbasis")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__pset_mask_table"})
+		g.emit(OpSTAM, maskPtrAddr, "Speichere Zeiger auf Maske")
+		g.emit(OpLDAMM, maskPtrAddr, "Lade Maske via LDAMM")
 		g.emit(OpSTAM, maskAddr, "Speichere Maske")
-		g.emit(OpBA, maskLoopPC, "Loop Mask-Shift")
 
-		g.labels[lineMaskReadyLabel] = g.pc
-
-		// Lese aktuellen Wert an wordAddr
-		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
-		patchLineRead := g.pc + 3
-		g.emit(OpSTAM, patchLineRead, "Patch Leseadresse")
-		g.emit(OpLDAM, 0, "Lade aktuellen Wortwert")
+		// Lese aktuellen Wert an wordAddr via LDAMM
+		g.emit(OpLDAMM, wordAddr, "Lade aktuellen Wortwert via LDAMM")
 		g.emit(OpSTAM, currWordAddr, "Speichere currWord")
 
 		// Color prüfen
@@ -1755,13 +2018,10 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emit(OpAND, 0, "currWord & ~mask")
 		g.emit(OpSTAM, currWordAddr, "Speichere neues currWord")
 
-		// Write back
+		// Write back via STAMM
 		g.labels[lineWriteLabel] = g.pc
-		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
-		patchLineWrite := g.pc + 5
-		g.emit(OpSTAM, patchLineWrite, "Patch Schreibadresse")
 		g.emit(OpLDAM, currWordAddr, "Lade geändertes Wort")
-		g.emit(OpSTAM, 0, "Schreibe Pixelwort in Display")
+		g.emit(OpSTAMM, wordAddr, "Schreibe Pixelwort in Display via STAMM")
 
 		// 4b. Prüfe ob Ziel (x1 == x2 && y1 == y2) erreicht ist
 		lineStepLabel := fmt.Sprintf("__line_step_%d", g.pc)
@@ -1867,6 +2127,22 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		// Fertig
 		g.labels["__line_done"] = g.pc
 		g.emitSingle(OpRET, "RETURN __line")
+	}
+
+	// 6. Gemeinsame Masken-Tabelle einbetten (16 Worte für Bits 15 bis 0), falls PSET oder LINE genutzt wird
+	if g.needPset || g.needLine {
+		g.labels["__pset_mask_table"] = g.pc
+		masks := []uint16{
+			0x8000, 0x4000, 0x2000, 0x1000,
+			0x0800, 0x0400, 0x0200, 0x0100,
+			0x0080, 0x0040, 0x0020, 0x0010,
+			0x0008, 0x0004, 0x0002, 0x0001,
+		}
+		for i, m := range masks {
+			g.memory[g.pc] = m
+			g.comments[g.pc] = fmt.Sprintf("Maske fuer Bit %d", 15-i)
+			g.pc++
+		}
 	}
 }
 

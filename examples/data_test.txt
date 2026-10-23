@@ -3,74 +3,74 @@
 // ============================================================
 CLR
 
-0 0x4000 // Initialer Sprung zum Hauptprogramm
-1 0x000A // Operand #0x0000 (0)
-10 0x1400 // Init __data_ptr
-11 0x0048 // Operand #0x0000 (0)
-12 0x2800 // Speichere __data_ptr
-13 0x01F4 // Operand #0x01F4 (500)
-14 0x1C00 // READ A
-15 0x01F4 // Operand #0x01F4 (500)
-16 0x2800 // Speichere in A
-17 0x01F5 // Operand #0x01F5 (501)
-18 0x1800 // Lade __data_ptr
-19 0x01F4 // Operand #0x01F4 (500)
-20 0x3440 // __data_ptr + 1
-21 0x0001 // Operand #0x0001 (1)
-22 0x2800 // Aktualisiere __data_ptr
-23 0x01F4 // Operand #0x01F4 (500)
-24 0x1C00 // READ B
-25 0x01F4 // Operand #0x01F4 (500)
-26 0x2800 // Speichere in B
-27 0x01F6 // Operand #0x01F6 (502)
-28 0x1800 // Lade __data_ptr
-29 0x01F4 // Operand #0x01F4 (500)
-30 0x3440 // __data_ptr + 1
-31 0x0001 // Operand #0x0001 (1)
-32 0x2800 // Aktualisiere __data_ptr
-33 0x01F4 // Operand #0x01F4 (500)
-34 0x1C00 // READ C
-35 0x01F4 // Operand #0x01F4 (500)
-36 0x2800 // Speichere in C
-37 0x01F7 // Operand #0x01F7 (503)
-38 0x1800 // Lade __data_ptr
-39 0x01F4 // Operand #0x01F4 (500)
-40 0x3440 // __data_ptr + 1
-41 0x0001 // Operand #0x0001 (1)
-42 0x2800 // Aktualisiere __data_ptr
-43 0x01F4 // Operand #0x01F4 (500)
-44 0x1C00 // READ D
-45 0x01F4 // Operand #0x01F4 (500)
-46 0x2800 // Speichere in D
-47 0x01F8 // Operand #0x01F8 (504)
-48 0x1800 // Lade __data_ptr
-49 0x01F4 // Operand #0x01F4 (500)
-50 0x3440 // __data_ptr + 1
-51 0x0001 // Operand #0x0001 (1)
-52 0x2800 // Aktualisiere __data_ptr
-53 0x01F4 // Operand #0x01F4 (500)
-54 0x1400 // RESTORE DATA Pointer
-55 0x0048 // Operand #0x0000 (0)
-56 0x2800 // Speichere __data_ptr
-57 0x01F4 // Operand #0x01F4 (500)
-58 0x1C00 // READ FIRST_AGAIN
-59 0x01F4 // Operand #0x01F4 (500)
-60 0x2800 // Speichere in FIRST_AGAIN
-61 0x01F9 // Operand #0x01F9 (505)
-62 0x1800 // Lade __data_ptr
-63 0x01F4 // Operand #0x01F4 (500)
-64 0x3440 // __data_ptr + 1
-65 0x0001 // Operand #0x0001 (1)
-66 0x2800 // Aktualisiere __data_ptr
-67 0x01F4 // Operand #0x01F4 (500)
-68 0x4000 // END / HALT
-69 0x0044 // Operand #0x0044 (68)
-70 0x4000 // Ende des Programms (Halt-Schleife)
-71 0x0046 // Operand #0x0046 (70)
-72 0x0064 // DATA 100
-73 0x00C8 // DATA 200
-74 0x012C // DATA 300
-75 0x0190 // DATA 400
-500 0x0048
+0 0x4000 // Initialer Sprung über Hardware I/O (Addr 2=OUT, 3=IN)
+1 0x0004 // Operand #0x0000 (0)
+4 0x1400 // Init __data_ptr
+5 0x0042 // Operand #0x0000 (0)
+6 0x2800 // Speichere __data_ptr
+7 0x0398 // Operand #0x0398 (920)
+8 0x1C00 // READ A
+9 0x0398 // Operand #0x0398 (920)
+10 0x2800 // Speichere in A
+11 0x0399 // Operand #0x0399 (921)
+12 0x1800 // Lade __data_ptr
+13 0x0398 // Operand #0x0398 (920)
+14 0x3440 // __data_ptr + 1
+15 0x0001 // Operand #0x0001 (1)
+16 0x2800 // Aktualisiere __data_ptr
+17 0x0398 // Operand #0x0398 (920)
+18 0x1C00 // READ B
+19 0x0398 // Operand #0x0398 (920)
+20 0x2800 // Speichere in B
+21 0x039A // Operand #0x039A (922)
+22 0x1800 // Lade __data_ptr
+23 0x0398 // Operand #0x0398 (920)
+24 0x3440 // __data_ptr + 1
+25 0x0001 // Operand #0x0001 (1)
+26 0x2800 // Aktualisiere __data_ptr
+27 0x0398 // Operand #0x0398 (920)
+28 0x1C00 // READ C
+29 0x0398 // Operand #0x0398 (920)
+30 0x2800 // Speichere in C
+31 0x039B // Operand #0x039B (923)
+32 0x1800 // Lade __data_ptr
+33 0x0398 // Operand #0x0398 (920)
+34 0x3440 // __data_ptr + 1
+35 0x0001 // Operand #0x0001 (1)
+36 0x2800 // Aktualisiere __data_ptr
+37 0x0398 // Operand #0x0398 (920)
+38 0x1C00 // READ D
+39 0x0398 // Operand #0x0398 (920)
+40 0x2800 // Speichere in D
+41 0x039C // Operand #0x039C (924)
+42 0x1800 // Lade __data_ptr
+43 0x0398 // Operand #0x0398 (920)
+44 0x3440 // __data_ptr + 1
+45 0x0001 // Operand #0x0001 (1)
+46 0x2800 // Aktualisiere __data_ptr
+47 0x0398 // Operand #0x0398 (920)
+48 0x1400 // RESTORE DATA Pointer
+49 0x0042 // Operand #0x0000 (0)
+50 0x2800 // Speichere __data_ptr
+51 0x0398 // Operand #0x0398 (920)
+52 0x1C00 // READ FIRST_AGAIN
+53 0x0398 // Operand #0x0398 (920)
+54 0x2800 // Speichere in FIRST_AGAIN
+55 0x039D // Operand #0x039D (925)
+56 0x1800 // Lade __data_ptr
+57 0x0398 // Operand #0x0398 (920)
+58 0x3440 // __data_ptr + 1
+59 0x0001 // Operand #0x0001 (1)
+60 0x2800 // Aktualisiere __data_ptr
+61 0x0398 // Operand #0x0398 (920)
+62 0x4000 // END / HALT
+63 0x003E // Operand #0x003E (62)
+64 0x4000 // Ende des Programms (Halt-Schleife)
+65 0x0040 // Operand #0x0040 (64)
+66 0x0064 // DATA 100
+67 0x00C8 // DATA 200
+68 0x012C // DATA 300
+69 0x0190 // DATA 400
+920 0x0042
 
 RUN
