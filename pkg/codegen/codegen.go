@@ -230,22 +230,53 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 		return nil
 
 	case *ast.PokeStmt:
-		// 1. Berechne Wert
+		// Spezialfall: Konstante Adresse (z.B. POKE 2, X oder POKE 960, 0)
+		if numAddr, ok := s.Address.(*ast.NumberLiteral); ok {
+			if err := g.compileExpr(s.Value); err != nil {
+				return err
+			}
+			g.emit(OpSTAM, uint16(numAddr.Value&0xFFFF), fmt.Sprintf("POKE [%d] = Accu (direkt)", numAddr.Value))
+			return nil
+		}
+
+		// Dynamische Adresse: Lade Wert, speichere Adresse in Pointer, schreibe via STAMM
 		if err := g.compileExpr(s.Value); err != nil {
 			return err
 		}
 		valTemp := g.allocTemp()
 		g.emit(OpSTAM, valTemp, "POKE Temp Wert")
 
-		// 2. Berechne Adresse
 		if err := g.compileExpr(s.Address); err != nil {
 			return err
 		}
-		// Dynamischer Store über Opcode-Patching
-		patchStore := g.pc + 5
-		g.emit(OpSTAM, patchStore, "Patch POKE Zieladresse")
+		addrTemp := g.allocTemp()
+		g.emit(OpSTAM, addrTemp, "POKE Zeigeradresse")
 		g.emit(OpLDAM, valTemp, "Lade POKE Wert")
-		g.emit(OpSTAM, 0, "POKE [dynamisch]")
+		g.emit(OpSTAMM, addrTemp, "POKE [[addrTemp]] (indirekt via STAMM)")
+		return nil
+
+	case *ast.OutStmt:
+		// OUT Port, Value (Hardware Port 2 = OUT Register)
+		if numPort, ok := s.Port.(*ast.NumberLiteral); ok {
+			if err := g.compileExpr(s.Value); err != nil {
+				return err
+			}
+			g.emit(OpSTAM, uint16(numPort.Value&0xFFFF), fmt.Sprintf("OUT Port %d = Accu (direkt)", numPort.Value))
+			return nil
+		}
+		if err := g.compileExpr(s.Value); err != nil {
+			return err
+		}
+		valTemp := g.allocTemp()
+		g.emit(OpSTAM, valTemp, "OUT Temp Wert")
+
+		if err := g.compileExpr(s.Port); err != nil {
+			return err
+		}
+		portTemp := g.allocTemp()
+		g.emit(OpSTAM, portTemp, "OUT Port Zeiger")
+		g.emit(OpLDAM, valTemp, "Lade OUT Wert")
+		g.emit(OpSTAMM, portTemp, "OUT [[portTemp]] (indirekt via STAMM)")
 		return nil
 
 	case *ast.ScreenStmt:
@@ -483,7 +514,47 @@ func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
 	}
 	g.emit(OpSTAM, varAddr, fmt.Sprintf("FOR %s Startwert", s.VarName))
 
-	// 2. Berechne und speichere Endwert
+	// Spezialfall: Konstanter Endwert (z.B. FOR I = 1 TO 31)
+	if numEnd, ok := s.End.(*ast.NumberLiteral); ok {
+		loopStartPC := g.pc
+		loopStartLabel := fmt.Sprintf("__for_start_%s_%d", s.VarName, loopStartPC)
+		loopEndLabel := fmt.Sprintf("__for_end_%s_%d", s.VarName, loopStartPC)
+		g.labels[loopStartLabel] = loopStartPC
+
+		// Schleifenbedingung: Var <= EndVal -> EndVal - Var >= 0
+		// EndVal - Var = ~Var + (EndVal + 1)
+		// Wenn Negativ (Bit 15 gesetzt) -> Schleife beenden (Var > EndVal)
+		g.emit(OpLDAM, varAddr, "Pruefe FOR Limit (optimiert)")
+		g.emit(OpNOT, 0, "~Var")
+		g.emit(OpADD, uint16((numEnd.Value+1)&0xFFFF), fmt.Sprintf("~Var + %d (Endwert-Check)", numEnd.Value+1))
+		g.emit(OpBN, 0, "FOR Beenden wenn Var > End")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopEndLabel})
+
+		// Schleifenrumpf (Body)
+		for _, bStmt := range s.Body {
+			if err := g.compileStmt(bStmt); err != nil {
+				return err
+			}
+		}
+
+		// Schrittweite addieren (Inkrement): Var = Var + Step
+		stepVal := 1
+		if num, ok := s.Step.(*ast.NumberLiteral); ok {
+			stepVal = num.Value
+		}
+		g.emit(OpLDAM, varAddr, "Lade Zaehler")
+		g.emit(OpADD, uint16(stepVal&0xFFFF), fmt.Sprintf("Zaehler + %d", stepVal))
+		g.emit(OpSTAM, varAddr, "Speichere Zaehler")
+
+		// Sprung zurück zum Schleifenanfang
+		g.emit(OpBA, 0, "FOR Loop Sprung")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopStartLabel})
+
+		g.labels[loopEndLabel] = g.pc
+		return nil
+	}
+
+	// Dynamischer Endwert:
 	if err := g.compileExpr(s.End); err != nil {
 		return err
 	}
@@ -583,12 +654,17 @@ func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
 		return g.compileBinary(e)
 
 	case *ast.PeekExpr:
+		// Spezialfall: Konstante Adresse (z.B. PEEK(3))
+		if numAddr, ok := e.Address.(*ast.NumberLiteral); ok {
+			g.emit(OpLDAM, uint16(numAddr.Value&0xFFFF), fmt.Sprintf("PEEK([%d]) direkt", numAddr.Value))
+			return nil
+		}
 		if err := g.compileExpr(e.Address); err != nil {
 			return err
 		}
-		patchLoad := g.pc + 3
-		g.emit(OpSTAM, patchLoad, "Patch PEEK Quelladresse")
-		g.emit(OpLDAM, 0, "PEEK [dynamisch]")
+		ptrTemp := g.allocTemp()
+		g.emit(OpSTAM, ptrTemp, "PEEK Zeigeradresse")
+		g.emit(OpLDAMM, ptrTemp, "PEEK [[ptrTemp]] (indirekt via LDAMM)")
 		return nil
 
 	case *ast.SqrExpr:
@@ -823,6 +899,71 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 			}
 			return nil
 		}
+	}
+
+	// Schnelle Optimierung: Linke Seite ist eine Zahlenkonstante (z.B. 10 + X oder 10 - X)
+	if num, ok := e.Left.(*ast.NumberLiteral); ok {
+		if op == "+" {
+			if err := g.compileExpr(e.Right); err != nil {
+				return err
+			}
+			g.emit(OpADD, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu + %d", num.Value))
+			return nil
+		} else if op == "-" {
+			// num - Right = ~Right + (num + 1)
+			if err := g.compileExpr(e.Right); err != nil {
+				return err
+			}
+			g.emit(OpNOT, 0, "~Right")
+			g.emit(OpADD, uint16((num.Value+1)&0xFFFF), fmt.Sprintf("~Right + %d (%d - Right)", num.Value+1, num.Value))
+			return nil
+		} else if op == "AND" {
+			if err := g.compileExpr(e.Right); err != nil {
+				return err
+			}
+			g.emit(OpAND, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu AND 0x%04X", num.Value))
+			return nil
+		} else if op == "OR" {
+			if err := g.compileExpr(e.Right); err != nil {
+				return err
+			}
+			g.emit(OpOR, uint16(num.Value&0xFFFF), fmt.Sprintf("Accu OR 0x%04X", num.Value))
+			return nil
+		}
+	}
+
+	// Schnelle Optimierung: Rechter Operand ist eine einfache Variable (+, -, AND, OR)
+	// Vermeidet das Allokieren und Neuladen temporärer Zwischenspeicher
+	if vRight, ok := e.Right.(*ast.VariableExpr); ok && (op == "+" || op == "AND" || op == "OR") {
+		vAddr := g.getOrCreateVar(vRight.Name)
+		g.emit(OpLDAM, vAddr, fmt.Sprintf("Lade %s fuer Patch", vRight.Name))
+		patchAddr := g.pc + 5
+		g.emit(OpSTAM, patchAddr, fmt.Sprintf("Patch %s Operand", op))
+		if err := g.compileExpr(e.Left); err != nil {
+			return err
+		}
+		switch op {
+		case "+":
+			g.emit(OpADD, 0, fmt.Sprintf("A + %s", vRight.Name))
+		case "AND":
+			g.emit(OpAND, 0, fmt.Sprintf("A AND %s", vRight.Name))
+		case "OR":
+			g.emit(OpOR, 0, fmt.Sprintf("A OR %s", vRight.Name))
+		}
+		return nil
+	}
+	if vRight, ok := e.Right.(*ast.VariableExpr); ok && op == "-" {
+		vAddr := g.getOrCreateVar(vRight.Name)
+		g.emit(OpLDAM, vAddr, fmt.Sprintf("Lade %s fuer Negation", vRight.Name))
+		g.emit(OpNOT, 0, fmt.Sprintf("~%s", vRight.Name))
+		g.emit(OpADD, 1, fmt.Sprintf("-%s", vRight.Name))
+		patchAddr := g.pc + 5
+		g.emit(OpSTAM, patchAddr, "Patch ADD Operand mit -B")
+		if err := g.compileExpr(e.Left); err != nil {
+			return err
+		}
+		g.emit(OpADD, 0, fmt.Sprintf("A - %s", vRight.Name))
+		return nil
 	}
 
 	// Rechte Seite in temporäre Zelle evaluieren
@@ -1085,17 +1226,18 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emit(OpLDAM, r0Addr, "Lade Dividend in Remainder")
 		g.emit(OpSTAM, remAddr, "rem = dividend")
 
-		divLoopPC := g.pc
-		g.labels["__div_loop"] = divLoopPC
-
-		// Berechne rem - divisor
-		g.emit(OpLDAM, r1Addr, "Lade Divisor")
+		// Vorab-Berechnung: Berechne -Divisor EINMALIG vor Eintritt in die Schleife
+		g.emit(OpLDAM, r1Addr, "__div: Lade Divisor")
 		g.emit(OpNOT, 0, "~Divisor")
 		g.emit(OpADD, 1, "-Divisor")
 		patchDiv := g.pc + 5
-		g.emit(OpSTAM, patchDiv, "Patch Divisor")
+		g.emit(OpSTAM, patchDiv, "Patch Divisor-Subtraktion")
+
+		divLoopPC := g.pc
+		g.labels["__div_loop"] = divLoopPC
+
 		g.emit(OpLDAM, remAddr, "Lade rem")
-		g.emit(OpADD, 0, "rem - Divisor")
+		g.emit(OpADD, 0, "rem - Divisor (vorab gepatcht)")
 
 		// Wenn negativ -> Divisor passt nicht mehr hinein -> Fertig
 		g.emit(OpBN, 0, "__div: Fertig wenn rem < Divisor")
@@ -1320,11 +1462,9 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		clsLoop := g.pc
 		g.labels["__cls_loop"] = clsLoop
 
-		g.emit(OpLDAM, ptrCls, "Lade Zeiger")
-		patchCls := g.pc + 5
-		g.emit(OpSTAM, patchCls, "Patch Zieladresse")
+		// Schnell: Indirekter Speicherzugriff ueber STAMM
 		g.emit(OpLDA, 0, "Pixeldaten = 0")
-		g.emit(OpSTAM, 0, "Schreibe in Display")
+		g.emit(OpSTAMM, ptrCls, "Schreibe in Display via STAMM")
 
 		g.emit(OpLDAM, ptrCls, "Zeiger inkrementieren")
 		g.emit(OpADD, 1, "ptr++")
@@ -1347,7 +1487,7 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emitSingle(OpRET, "RETURN __cls")
 	}
 
-	// 4. Pixel setzen/löschen __pset (PSET X, Y, Color) mit echtem Bit-Masking
+	// 4. Pixel setzen/löschen __pset (PSET X, Y, Color) mit O(1) Bitmasken-Tabelle & STAMM
 	if g.needPset {
 		g.labels["__runtime_pset"] = g.pc
 		xAddr := g.getOrCreateVar("__pset_x")
@@ -1355,8 +1495,8 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		cAddr := g.getOrCreateVar("__pset_c")
 		wordAddr := g.getOrCreateVar("__pset_word_addr")
 		maskAddr := g.getOrCreateVar("__pset_mask")
-		countAddr := g.getOrCreateVar("__pset_count")
 		currWordAddr := g.getOrCreateVar("__pset_curr_word")
+		maskTablePtr := g.getOrCreateVar("__pset_mask_ptr")
 
 		// 1. Berechne WordAddr = DisplayBase + (Y * 2) + WordOffset
 		// Auf realer 32x32 Hardware:
@@ -1380,32 +1520,17 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 
 		g.labels["__pset_word_ready"] = g.pc
 
-		// 2. Berechne Bitmaske = 0x8000 >> (X & 15)
-		g.emit(OpLDA, 0x8000, "Init Maske = 0x8000 (Bit 15)")
-		g.emit(OpSTAM, maskAddr, "Speichere Startmaske")
+		// 2. Bitmaske aus vorab erstellter 16-Wort-Tabelle per LDAMM laden (O(1) direkt statt Shift-Schleife!)
 		g.emit(OpLDAM, xAddr, "Lade X")
 		g.emit(OpAND, 0x000F, "X & 15 (Bit-Index)")
-		g.emit(OpSTAM, countAddr, "Speichere Shift-Count")
-
-		// Mask-Shift-Schleife
-		maskLoop := g.pc
-		g.emit(OpLDAM, countAddr, "Lade Shift-Count")
-		g.emit(OpBZ, 0, "Fertig wenn Count == 0")
-		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__pset_mask_ready"})
-		g.emit(OpADD, 0xFFFF, "Count - 1")
-		g.emit(OpSTAM, countAddr, "Speichere Count")
-		g.emit(OpLDAM, maskAddr, "Lade Maske")
-		g.emit(OpSHR, 0, "Maske >> 1")
+		g.emit(OpADD, 0, "Addiere Tabellenbasis")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__pset_mask_table"})
+		g.emit(OpSTAM, maskTablePtr, "Speichere Zeiger auf Maske")
+		g.emit(OpLDAMM, maskTablePtr, "Lade Maske via LDAMM")
 		g.emit(OpSTAM, maskAddr, "Speichere Maske")
-		g.emit(OpBA, maskLoop, "Loop Mask-Shift")
 
-		g.labels["__pset_mask_ready"] = g.pc
-
-		// 3. Lade aktuellen Bildschirminhalt an wordAddr
-		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
-		patchRead := g.pc + 3
-		g.emit(OpSTAM, patchRead, "Patch Leseadresse")
-		g.emit(OpLDAM, 0, "Lade aktuellen Wortwert")
+		// 3. Lade aktuellen Bildschirminhalt via LDAMM
+		g.emit(OpLDAMM, wordAddr, "Lade aktuellen Wortwert via LDAMM")
 		g.emit(OpSTAM, currWordAddr, "Speichere currWord")
 
 		// 4. Prüfe Color: Wenn Color == 0 -> Pixel löschen, sonst Pixel setzen
@@ -1433,15 +1558,25 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emit(OpAND, 0, "currWord & ~mask")
 		g.emit(OpSTAM, currWordAddr, "Speichere neues currWord")
 
-		// 5. Schreibe modifiziertes Wort zurück in Display
+		// 5. Schreibe modifiziertes Wort zurück via STAMM
 		g.labels["__pset_write"] = g.pc
-		g.emit(OpLDAM, wordAddr, "Lade wordAddr")
-		patchWrite := g.pc + 5
-		g.emit(OpSTAM, patchWrite, "Patch Schreibadresse")
 		g.emit(OpLDAM, currWordAddr, "Lade geändertes Wort")
-		g.emit(OpSTAM, 0, "Schreibe Pixelwort in Display")
-
+		g.emit(OpSTAMM, wordAddr, "Schreibe Pixelwort in Display via STAMM")
 		g.emitSingle(OpRET, "RETURN __pset")
+
+		// 6. Masken-Tabelle einbetten (16 Worte für Bits 15 bis 0)
+		g.labels["__pset_mask_table"] = g.pc
+		masks := []uint16{
+			0x8000, 0x4000, 0x2000, 0x1000,
+			0x0800, 0x0400, 0x0200, 0x0100,
+			0x0080, 0x0040, 0x0020, 0x0010,
+			0x0008, 0x0004, 0x0002, 0x0001,
+		}
+		for i, m := range masks {
+			g.memory[g.pc] = m
+			g.comments[g.pc] = fmt.Sprintf("Maske fuer Bit %d", 15-i)
+			g.pc++
+		}
 	}
 
 	// 5. Bresenham Linie zeichnen __line (LINE X1, Y1 TO X2, Y2, Color)

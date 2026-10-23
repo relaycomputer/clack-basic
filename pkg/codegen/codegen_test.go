@@ -408,4 +408,137 @@ func TestCodeGen_PowerOfTwoOptimizations(t *testing.T) {
 	}
 }
 
+func TestCodeGen_MaxPerformanceOptimizations(t *testing.T) {
+	t.Run("Direct_POKE_and_PEEK_Constants", func(t *testing.T) {
+		src := "10 POKE 2, 42\n20 X = PEEK(3)\n30 OUT 2, 99\n40 END\n"
+		l := lexer.NewLexer(src)
+		prog, err := parser.NewParser(l.Tokenize()).ParseProgram()
+		if err != nil {
+			t.Fatalf("Parse error: %v", err)
+		}
+		gen := NewCodeGenerator()
+		mem, comments, err := gen.Generate(prog)
+		if err != nil {
+			t.Fatalf("Codegen error: %v", err)
+		}
+
+		// Prüfe ob POKE 2 direkt per OpSTAM 2 abgelegt wird (ohne Patching)
+		foundDirectPoke := false
+		foundDirectPeek := false
+		for pc := 4; pc < int(gen.pc); pc++ {
+			if mem[pc] == OpSTAM && mem[pc+1] == 2 {
+				foundDirectPoke = true
+			}
+			if mem[pc] == OpLDAM && mem[pc+1] == 3 {
+				foundDirectPeek = true
+			}
+		}
+		if !foundDirectPoke {
+			t.Errorf("Expected direct OpSTAM 2 for POKE/OUT")
+		}
+		if !foundDirectPeek {
+			t.Errorf("Expected direct OpLDAM 3 for PEEK(3)")
+		}
+
+		// Initialer Zustand mit IN Register (Adresse 3) = 77
+		mem[3] = 77
+		_, finalMem, err := runRelayEmulator(mem, 1000)
+		if err != nil {
+			t.Fatalf("Emulator error: %v", err)
+		}
+		xAddr := gen.symbols["X"]
+		if finalMem[xAddr] != 77 {
+			t.Errorf("Expected X=77 from PEEK(3), got %d", finalMem[xAddr])
+		}
+		if finalMem[2] != 99 {
+			t.Errorf("Expected OUT (addr 2) = 99, got %d", finalMem[2])
+		}
+		_ = comments
+	})
+
+	t.Run("Optimized_FOR_Loop", func(t *testing.T) {
+		src := "10 S = 0\n20 FOR I = 1 TO 10\n30 S = S + I\n40 NEXT I\n50 END\n"
+		l := lexer.NewLexer(src)
+		prog, err := parser.NewParser(l.Tokenize()).ParseProgram()
+		if err != nil {
+			t.Fatalf("Parse error: %v", err)
+		}
+		gen := NewCodeGenerator()
+		mem, _, err := gen.Generate(prog)
+		if err != nil {
+			t.Fatalf("Codegen error: %v", err)
+		}
+
+		_, finalMem, err := runRelayEmulator(mem, 5000)
+		if err != nil {
+			t.Fatalf("Emulator error: %v", err)
+		}
+		sAddr := gen.symbols["S"]
+		if finalMem[sAddr] != 55 {
+			t.Errorf("Expected sum 1..10 = 55, got %d", finalMem[sAddr])
+		}
+	})
+
+	t.Run("Left_Literal_Arithmetic", func(t *testing.T) {
+		src := "10 Y = 7\n20 A = 10 + Y\n30 B = 20 - Y\n40 C = 0xFF AND Y\n50 D = 0x80 OR Y\n60 END\n"
+		l := lexer.NewLexer(src)
+		prog, err := parser.NewParser(l.Tokenize()).ParseProgram()
+		if err != nil {
+			t.Fatalf("Parse error: %v", err)
+		}
+		gen := NewCodeGenerator()
+		mem, _, err := gen.Generate(prog)
+		if err != nil {
+			t.Fatalf("Codegen error: %v", err)
+		}
+
+		_, finalMem, err := runRelayEmulator(mem, 2000)
+		if err != nil {
+			t.Fatalf("Emulator error: %v", err)
+		}
+		if finalMem[gen.symbols["A"]] != 17 {
+			t.Errorf("Expected 10+7=17, got %d", finalMem[gen.symbols["A"]])
+		}
+		if finalMem[gen.symbols["B"]] != 13 {
+			t.Errorf("Expected 20-7=13, got %d", finalMem[gen.symbols["B"]])
+		}
+		if finalMem[gen.symbols["C"]] != 7 {
+			t.Errorf("Expected 0xFF AND 7 = 7, got %d", finalMem[gen.symbols["C"]])
+		}
+		if finalMem[gen.symbols["D"]] != 0x87 {
+			t.Errorf("Expected 0x80 OR 7 = 0x87, got %d", finalMem[gen.symbols["D"]])
+		}
+	})
+
+	t.Run("PSET_Plot_Bitmask_Table", func(t *testing.T) {
+		src := "10 CLS\n20 PLOT 0, 0, 1\n30 PLOT 16, 0, 1\n40 END\n"
+		l := lexer.NewLexer(src)
+		prog, err := parser.NewParser(l.Tokenize()).ParseProgram()
+		if err != nil {
+			t.Fatalf("Parse error: %v", err)
+		}
+		gen := NewCodeGenerator()
+		mem, _, err := gen.Generate(prog)
+		if err != nil {
+			t.Fatalf("Codegen error: %v", err)
+		}
+
+		_, finalMem, err := runRelayEmulator(mem, 10000)
+		if err != nil {
+			t.Fatalf("Emulator error: %v", err)
+		}
+		// Word 1 (Offset 1) = Linke Hälfte (X=0..15), Addr DisplayBase + 1 = 961
+		// Word 0 (Offset 0) = Rechte Hälfte (X=16..31), Addr DisplayBase + 0 = 960
+		// PLOT 0,0,1 setzt Bit 15 in Word 1 (0x8000 in Addr 961)
+		// PLOT 16,0,1 setzt Bit 15 in Word 0 (0x8000 in Addr 960)
+		if finalMem[961] != 0x8000 {
+			t.Errorf("Expected 0x8000 at display addr 961, got 0x%04X", finalMem[961])
+		}
+		if finalMem[960] != 0x8000 {
+			t.Errorf("Expected 0x8000 at display addr 960, got 0x%04X", finalMem[960])
+		}
+	})
+}
+
+
 
