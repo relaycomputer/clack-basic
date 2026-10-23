@@ -621,6 +621,56 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 
 	// Spezialfall: Multiplikation (*)
 	if op == "*" {
+		// Optimierung: Multiplikation mit 0
+		if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value == 0 {
+			g.emit(OpLDA, 0, "Accu = 0 (* 0)")
+			return nil
+		}
+		if num, ok := e.Left.(*ast.NumberLiteral); ok && num.Value == 0 {
+			g.emit(OpLDA, 0, "Accu = 0 (0 *)")
+			return nil
+		}
+
+		// Optimierung: Multiplikation mit 1
+		if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value == 1 {
+			return g.compileExpr(e.Left)
+		}
+		if num, ok := e.Left.(*ast.NumberLiteral); ok && num.Value == 1 {
+			return g.compileExpr(e.Right)
+		}
+
+		// Optimierung: Multiplikation mit Zweierpotenz (2, 4, 8, 16, 32, ...) per Hardware-Linksshift SHL
+		if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value > 0 && (num.Value&(num.Value-1)) == 0 && num.Value <= 32768 {
+			if err := g.compileExpr(e.Left); err != nil {
+				return err
+			}
+			shifts := 0
+			val := num.Value
+			for val > 1 {
+				val >>= 1
+				shifts++
+			}
+			for s := 0; s < shifts; s++ {
+				g.emit(OpSHL, 0, fmt.Sprintf("SHL Linksshift (*%d, %d/%d)", num.Value, s+1, shifts))
+			}
+			return nil
+		}
+		if num, ok := e.Left.(*ast.NumberLiteral); ok && num.Value > 0 && (num.Value&(num.Value-1)) == 0 && num.Value <= 32768 {
+			if err := g.compileExpr(e.Right); err != nil {
+				return err
+			}
+			shifts := 0
+			val := num.Value
+			for val > 1 {
+				val >>= 1
+				shifts++
+			}
+			for s := 0; s < shifts; s++ {
+				g.emit(OpSHL, 0, fmt.Sprintf("SHL Linksshift (*%d, %d/%d)", num.Value, s+1, shifts))
+			}
+			return nil
+		}
+
 		g.needMul = true
 		if err := g.compileExpr(e.Left); err != nil {
 			return err
@@ -639,6 +689,52 @@ func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 
 	// Spezialfall: Division (/) oder Modulo (MOD)
 	if op == "/" || op == "MOD" {
+		// Optimierung: Division durch 1
+		if op == "/" {
+			if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value == 1 {
+				return g.compileExpr(e.Left)
+			}
+		}
+
+		// Optimierung: Modulo 1 -> immer 0
+		if op == "MOD" {
+			if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value == 1 {
+				g.emit(OpLDA, 0, "Accu = 0 (MOD 1)")
+				return nil
+			}
+		}
+
+		// Optimierung: Division durch Zweierpotenz (2, 4, 8, 16, 32, 64, ...) per Hardware-Rechtsshift SHR
+		if op == "/" {
+			if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value > 0 && (num.Value&(num.Value-1)) == 0 && num.Value <= 32768 {
+				if err := g.compileExpr(e.Left); err != nil {
+					return err
+				}
+				shifts := 0
+				val := num.Value
+				for val > 1 {
+					val >>= 1
+					shifts++
+				}
+				for s := 0; s < shifts; s++ {
+					g.emit(OpSHR, 0, fmt.Sprintf("SHR Rechtsshift (/%d, %d/%d)", num.Value, s+1, shifts))
+				}
+				return nil
+			}
+		}
+
+		// Optimierung: Modulo durch Zweierpotenz (2, 4, 8, 16, 32, 64, ...) per Bitmaske AND (value - 1)
+		if op == "MOD" {
+			if num, ok := e.Right.(*ast.NumberLiteral); ok && num.Value > 0 && (num.Value&(num.Value-1)) == 0 && num.Value <= 32768 {
+				if err := g.compileExpr(e.Left); err != nil {
+					return err
+				}
+				mask := uint16((num.Value - 1) & 0xFFFF)
+				g.emit(OpAND, mask, fmt.Sprintf("Accu AND 0x%04X (MOD %d)", mask, num.Value))
+				return nil
+			}
+		}
+
 		g.needDiv = true
 		if err := g.compileExpr(e.Left); err != nil {
 			return err

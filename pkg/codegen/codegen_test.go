@@ -342,4 +342,70 @@ func TestCodeGen_BitwiseLogic(t *testing.T) {
 	}
 }
 
+func TestCodeGen_PowerOfTwoOptimizations(t *testing.T) {
+	testCases := []struct {
+		name     string
+		source   string
+		expected uint16
+		checkDiv bool
+		checkMul bool
+	}{
+		{"Div_by_2", "10 X = 64\n20 R = X / 2\n", 32, false, false},
+		{"Div_by_4", "10 X = 64\n20 R = X / 4\n", 16, false, false},
+		{"Div_by_16", "10 X = 64\n20 R = X / 16\n", 4, false, false},
+		{"Div_by_32", "10 X = 160\n20 R = X / 32\n", 5, false, false},
+		{"Mod_by_8", "10 X = 27\n20 R = X MOD 8\n", 3, false, false},
+		{"Mod_by_32", "10 X = 35\n20 R = X MOD 32\n", 3, false, false},
+		{"Mul_by_4", "10 X = 7\n20 R = X * 4\n", 28, false, false},
+		{"Mul_by_8", "10 X = 5\n20 R = 8 * X\n", 40, false, false},
+		{"Div_by_3_generic", "10 X = 100\n20 R = X / 3\n", 33, true, false},
+		{"Mul_by_3_generic", "10 X = 7\n20 R = X * 3\n", 21, false, true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.NewLexer(tc.source)
+			tokens := l.Tokenize()
+			p := parser.NewParser(tokens)
+			prog, err := p.ParseProgram()
+			if err != nil {
+				t.Fatalf("Parse error: %v", err)
+			}
+
+			gen := NewCodeGenerator()
+			mem, _, err := gen.Generate(prog)
+			if err != nil {
+				t.Fatalf("Codegen error: %v", err)
+			}
+
+			if tc.checkDiv && !gen.needDiv {
+				t.Errorf("Expected needDiv=true for generic division")
+			}
+			if !tc.checkDiv && gen.needDiv {
+				t.Errorf("Expected needDiv=false for optimized power-of-two division")
+			}
+			if tc.checkMul && !gen.needMul {
+				t.Errorf("Expected needMul=true for generic multiplication")
+			}
+			if !tc.checkMul && gen.needMul {
+				t.Errorf("Expected needMul=false for optimized power-of-two multiplication")
+			}
+
+			_, finalMem, err := runRelayEmulator(mem, 20000)
+			if err != nil {
+				t.Fatalf("Emulator error: %v", err)
+			}
+
+			rAddr, ok := gen.symbols["R"]
+			if !ok {
+				t.Fatalf("Symbol R not found in symbols")
+			}
+
+			if finalMem[rAddr] != tc.expected {
+				t.Errorf("Expected %d, got %d for %s", tc.expected, finalMem[rAddr], tc.source)
+			}
+		})
+	}
+}
+
 
