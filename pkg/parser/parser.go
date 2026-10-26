@@ -677,14 +677,16 @@ func (p *Parser) parsePrintStatement() ast.Stmt {
 
 	var items []ast.Expr
 	for p.curTok.Type != lexer.TOKEN_NEWLINE && p.curTok.Type != lexer.TOKEN_COLON && p.curTok.Type != lexer.TOKEN_EOF {
+		if p.curTok.Type == lexer.TOKEN_COMMA || p.curTok.Type == lexer.TOKEN_SEMICOLON {
+			p.nextToken()
+			continue
+		}
 		expr := p.parseExpression(PREC_LOWEST)
 		if expr != nil {
 			items = append(items, expr)
 		}
-		if p.curTok.Type == lexer.TOKEN_COMMA || p.curTok.Type == lexer.TOKEN_COLON {
-			if p.curTok.Type == lexer.TOKEN_COMMA {
-				p.nextToken()
-			}
+		if p.curTok.Type == lexer.TOKEN_COMMA || p.curTok.Type == lexer.TOKEN_SEMICOLON {
+			p.nextToken()
 		} else {
 			break
 		}
@@ -718,6 +720,11 @@ func (p *Parser) parsePrefix() ast.Expr {
 		val := p.curTok.Value
 		p.nextToken()
 		return &ast.NumberLiteral{Value: val, Line: line}
+
+	case lexer.TOKEN_STRING:
+		val := p.curTok.Lexeme
+		p.nextToken()
+		return &ast.StringLiteral{Value: val, Line: line}
 
 	case lexer.TOKEN_IDENT:
 		name := p.curTok.Lexeme

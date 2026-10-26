@@ -114,6 +114,24 @@ func TestCodeGen_SqrMath(t *testing.T) {
 		{"SQR(10, 2) fixed 3.16", "10 R = SQR(10, 2)\n20 END", 316},
 		{"SQR(100, 1) fixed 10.0", "10 R = SQR(100, 1)\n20 END", 100},
 		{"SQR(100, 2) fixed 10.00", "10 R = SQR(100, 2)\n20 END", 1000},
+		{"SQR Demo Program with PRINT and String/Semicolon", `10 REM ========================================================
+20 REM CLACK-BASIC v1.5.5 SQR DEMO // 16-BIT RELAISCOMPUTER
+30 REM ========================================================
+40 CLS
+50 PRINT "TEST 1: GANZZAHLIGE WURZELN"
+60 FOR X = 1 TO 10
+70   Y = SQR(X * X)
+80   PRINT "SQRT("; X * X; ") = "; Y
+90 NEXT X
+100 PRINT "----------------------------------------"
+110 PRINT "TEST 2: HOCHPRÄZISE FESTKOMMA-WURZEL"
+120 REM SQR(2, 2) berechnet Wurzel 2 mit 2 Nachkommastellen (x100)
+130 F = SQR(2, 2)
+140 W_INT = F / 100
+150 W_DEC = F MOD 100
+160 PRINT "SQRT(2) = "; W_INT; "."; W_DEC; " (ERGEBNIS: 1.41)"
+165 R = F
+170 END`, 141},
 	}
 
 	for _, tc := range testCases {

@@ -119,6 +119,8 @@ func (l *Lexer) NextToken() Token {
 		return Token{Type: TOKEN_SLASH, Lexeme: "/", Line: tokLine, Column: tokCol}
 	case ',':
 		return Token{Type: TOKEN_COMMA, Lexeme: ",", Line: tokLine, Column: tokCol}
+	case ';':
+		return Token{Type: TOKEN_SEMICOLON, Lexeme: ";", Line: tokLine, Column: tokCol}
 	case ':':
 		return Token{Type: TOKEN_COLON, Lexeme: ":", Line: tokLine, Column: tokCol}
 	case '(':

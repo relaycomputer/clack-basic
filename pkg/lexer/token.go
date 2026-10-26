@@ -75,6 +75,7 @@ const (
 
 	// Trennzeichen & Satzzeichen
 	TOKEN_COMMA     // ,
+	TOKEN_SEMICOLON // ;
 	TOKEN_COLON     // : (Befehlstrenner in einer Zeile)
 	TOKEN_LPAREN    // (
 	TOKEN_RPAREN    // )

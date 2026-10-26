@@ -45,9 +45,19 @@ type NumberLiteral struct {
 	Line  int
 }
 
-func (n *NumberLiteral) Pos() int    { return n.Line }
-func (n *NumberLiteral) exprNode()   {}
+func (n *NumberLiteral) Pos() int       { return n.Line }
+func (n *NumberLiteral) exprNode()      {}
 func (n *NumberLiteral) String() string { return fmt.Sprintf("%d", n.Value) }
+
+// StringLiteral: Zeichenketten-Konstante (z.B. "TEST 1: GANZZAHLIGE WURZELN")
+type StringLiteral struct {
+	Value string
+	Line  int
+}
+
+func (s *StringLiteral) Pos() int       { return s.Line }
+func (s *StringLiteral) exprNode()      {}
+func (s *StringLiteral) String() string { return fmt.Sprintf("%q", s.Value) }
 
 // VariableExpr: Variablenzugriff (z.B. A, X, COUNTER)
 type VariableExpr struct {

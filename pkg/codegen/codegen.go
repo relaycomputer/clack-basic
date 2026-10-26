@@ -461,6 +461,19 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 		g.emit(OpBA, haltPC, "END / HALT")
 		return nil
 
+	case *ast.PrintStmt:
+		for _, item := range s.Items {
+			if _, ok := item.(*ast.StringLiteral); ok {
+				// String-Literale dienen der Konsolen-Dokumentation; auf der 16-Bit Relais-Hardware sind sie ein No-Op
+				continue
+			}
+			if err := g.compileExpr(item); err != nil {
+				return err
+			}
+			g.emit(OpSTAM, 2, "PRINT Wert auf Hardware-Output (Port 2)")
+		}
+		return nil
+
 	default:
 		return fmt.Errorf("Nicht unterstütztes Statement: %T", stmt)
 	}
@@ -910,6 +923,9 @@ func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
 	switch e := expr.(type) {
 	case *ast.NumberLiteral:
 		g.emit(OpLDA, uint16(e.Value&0xFFFF), fmt.Sprintf("Konstante %d", e.Value))
+		return nil
+
+	case *ast.StringLiteral:
 		return nil
 
 	case *ast.VariableExpr:
