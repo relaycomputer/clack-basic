@@ -1,0 +1,774 @@
+// ============================================================
+// ⚡ Generiert von Clack-BASIC Cross-Compiler (Arduino Loader Format)
+// ============================================================
+CLR
+
+0 0x4000 // Initialer Sprung über Hardware I/O (Addr 2=OUT, 3=IN)
+1 0x0004 // Operand #0x0000 (0)
+4 0x1400 // CLACK-F16 Konstante 0x4000 (2)
+5 0x4000 // Operand #0x4000 (16384)
+6 0x2800 // LET S# = Accu
+7 0x0398 // Operand #0x0398 (920)
+8 0x1400 // CLACK-F16 Konstante 0x3F80 (1.5)
+9 0x3F80 // Operand #0x3F80 (16256)
+10 0x2800 // LET X# = Accu
+11 0x0399 // Operand #0x0399 (921)
+12 0x1400 // CLACK-F16 Konstante 0x3E00 (0.5)
+13 0x3E00 // Operand #0x3E00 (15872)
+14 0x2800 // LET H# = Accu
+15 0x039A // Operand #0x039A (922)
+16 0x1800 // Variable X#
+17 0x0399 // Operand #0x0399 (921)
+18 0x3480 // Accu AND 0x00FF
+19 0x00FF // Operand #0x00FF (255)
+20 0x2800 // POKE [2] = Accu (direkt)
+21 0x0002 // Operand #0x0002 (2)
+22 0x1400 // Konstante 8
+23 0x0008 // Operand #0x0008 (8)
+24 0x2800 // PSET X
+25 0x039B // Operand #0x039B (923)
+26 0x1400 // Konstante 8
+27 0x0008 // Operand #0x0008 (8)
+28 0x2800 // PSET Y
+29 0x039C // Operand #0x039C (924)
+30 0x1400 // Konstante 1
+31 0x0001 // Operand #0x0001 (1)
+32 0x2800 // PSET Color
+33 0x039D // Operand #0x039D (925)
+34 0x5000 // CALL __pset
+35 0x0313 // Operand #0x0000 (0)
+36 0x1400 // Konstante 1
+37 0x0001 // Operand #0x0001 (1)
+38 0x2800 // FOR I Startwert
+39 0x039E // Operand #0x039E (926)
+40 0x1800 // Pruefe FOR Limit (optimiert)
+41 0x039E // Operand #0x039E (926)
+42 0x3540 // ~Var
+44 0x3440 // ~Var + 3 (Endwert-Check)
+45 0x0003 // Operand #0x0003 (3)
+46 0x4010 // FOR Beenden wenn Var > End
+47 0x0080 // Operand #0x0000 (0)
+48 0x1800 // Variable H#
+49 0x039A // Operand #0x039A (922)
+50 0x2800 // __f16_mul Temp A sichern
+51 0x03B8 // Operand #0x03B8 (952)
+52 0x1800 // Variable X#
+53 0x0399 // Operand #0x0399 (921)
+54 0x2800 // __f16_add Temp A sichern
+55 0x03B9 // Operand #0x03B9 (953)
+56 0x1800 // Variable S#
+57 0x0398 // Operand #0x0398 (920)
+58 0x2800 // __f16_div Operand A -> __r0
+59 0x039F // Operand #0x039F (927)
+60 0x1800 // Variable X#
+61 0x0399 // Operand #0x0399 (921)
+62 0x2800 // __f16_div Operand B -> __r1
+63 0x03A0 // Operand #0x03A0 (928)
+64 0x5000 // CALL __f16_div
+65 0x0214 // Operand #0x0000 (0)
+66 0x2800 // __f16_add Operand B -> __r1
+67 0x03A0 // Operand #0x03A0 (928)
+68 0x1800 // __f16_add Lade Temp A
+69 0x03B9 // Operand #0x03B9 (953)
+70 0x2800 // __f16_add Operand A -> __r0
+71 0x039F // Operand #0x039F (927)
+72 0x5000 // CALL __f16_add
+73 0x0084 // Operand #0x0000 (0)
+74 0x2800 // __f16_mul Operand B -> __r1
+75 0x03A0 // Operand #0x03A0 (928)
+76 0x1800 // __f16_mul Lade Temp A
+77 0x03B8 // Operand #0x03B8 (952)
+78 0x2800 // __f16_mul Operand A -> __r0
+79 0x039F // Operand #0x039F (927)
+80 0x5000 // CALL __f16_mul
+81 0x0162 // Operand #0x0000 (0)
+82 0x2800 // LET X# = Accu
+83 0x0399 // Operand #0x0399 (921)
+84 0x1800 // Variable X#
+85 0x0399 // Operand #0x0399 (921)
+86 0x3480 // Accu AND 0x00FF
+87 0x00FF // Operand #0x00FF (255)
+88 0x2800 // LET M = Accu
+89 0x03A1 // Operand #0x03A1 (929)
+90 0x1800 // Variable M
+91 0x03A1 // Operand #0x03A1 (929)
+92 0x2800 // POKE [2] = Accu (direkt)
+93 0x0002 // Operand #0x0002 (2)
+94 0x1800 // Variable I
+95 0x039E // Operand #0x039E (926)
+96 0x35C0 // SHL Linksshift
+98 0x35C0 // SHL Linksshift
+100 0x35C0 // SHL Linksshift
+102 0x3440 // Accu + 8
+103 0x0008 // Operand #0x0008 (8)
+104 0x2800 // PSET X
+105 0x039B // Operand #0x039B (923)
+106 0x1800 // Variable M
+107 0x03A1 // Operand #0x03A1 (929)
+108 0x3540 // ~Right
+110 0x3440 // ~Right + 137 (136 - Right)
+111 0x0089 // Operand #0x0089 (137)
+112 0x2800 // PSET Y
+113 0x039C // Operand #0x039C (924)
+114 0x1400 // Konstante 1
+115 0x0001 // Operand #0x0001 (1)
+116 0x2800 // PSET Color
+117 0x039D // Operand #0x039D (925)
+118 0x5000 // CALL __pset
+119 0x0313 // Operand #0x0000 (0)
+120 0x1800 // Lade Zaehler
+121 0x039E // Operand #0x039E (926)
+122 0x3440 // Zaehler + 1
+123 0x0001 // Operand #0x0001 (1)
+124 0x2800 // Speichere Zaehler
+125 0x039E // Operand #0x039E (926)
+126 0x4000 // FOR Loop Sprung
+127 0x0028 // Operand #0x0000 (0)
+128 0x4000 // END / HALT
+129 0x0080 // Operand #0x0080 (128)
+130 0x4000 // Ende des Programms (Halt-Schleife)
+131 0x0082 // Operand #0x0082 (130)
+132 0x1800 // __f16_add: Lade Operand A
+133 0x039F // Operand #0x039F (927)
+134 0x3480 // |A| = A & 0x7FFF
+135 0x7FFF // Operand #0x7FFF (32767)
+136 0x4018 // Wenn |A| == 0 -> Return B
+137 0x015F // Operand #0x0000 (0)
+138 0x2800 // Speichere |A|
+139 0x03A6 // Operand #0x03A6 (934)
+140 0x1800 // __f16_add: Lade Operand B
+141 0x03A0 // Operand #0x03A0 (928)
+142 0x3480 // |B| = B & 0x7FFF
+143 0x7FFF // Operand #0x7FFF (32767)
+144 0x4018 // Wenn |B| == 0 -> Return A
+145 0x015C // Operand #0x0000 (0)
+146 0x2800 // Speichere |B|
+147 0x03A7 // Operand #0x03A7 (935)
+148 0x3540 // ~|B|
+150 0x3440 // -|B|
+151 0x0001 // Operand #0x0001 (1)
+152 0x2800 // Patch -|B|
+153 0x009D // Operand #0x009D (157)
+154 0x1800 // Lade |A|
+155 0x03A6 // Operand #0x03A6 (934)
+156 0x3440 // |A| - |B|
+158 0x4010 // Wenn |A| < |B| -> Swap A und B
+159 0x00A2 // Operand #0x0000 (0)
+160 0x4000 // Weiter zum Entpacken
+161 0x00AE // Operand #0x0000 (0)
+162 0x1800 // Swap: Lade A
+163 0x039F // Operand #0x039F (927)
+164 0x2800 // Temp = A
+165 0x03A6 // Operand #0x03A6 (934)
+166 0x1800 // Lade B
+167 0x03A0 // Operand #0x03A0 (928)
+168 0x2800 // __r0 = B
+169 0x039F // Operand #0x039F (927)
+170 0x1800 // Lade Temp
+171 0x03A6 // Operand #0x03A6 (934)
+172 0x2800 // __r1 = A
+173 0x03A0 // Operand #0x03A0 (928)
+174 0x1800 // Lade A
+175 0x039F // Operand #0x039F (927)
+176 0x3480 // signA = A & 0x8000
+177 0x8000 // Operand #0x8000 (32768)
+178 0x2800 // Speichere signA
+179 0x03A2 // Operand #0x03A2 (930)
+180 0x1800 // Lade B
+181 0x03A0 // Operand #0x03A0 (928)
+182 0x3480 // signB = B & 0x8000
+183 0x8000 // Operand #0x8000 (32768)
+184 0x2800 // Speichere signB
+185 0x03A3 // Operand #0x03A3 (931)
+186 0x1800 // Lade A fuer EA
+187 0x039F // Operand #0x039F (927)
+188 0x3480 // A & 0x7F00
+189 0x7F00 // Operand #0x7F00 (32512)
+190 0x3580 // EA >> 8
+192 0x3580 // EA >> 8
+194 0x3580 // EA >> 8
+196 0x3580 // EA >> 8
+198 0x3580 // EA >> 8
+200 0x3580 // EA >> 8
+202 0x3580 // EA >> 8
+204 0x3580 // EA >> 8
+206 0x2800 // Speichere EA
+207 0x03A4 // Operand #0x03A4 (932)
+208 0x1800 // Lade B fuer EB
+209 0x03A0 // Operand #0x03A0 (928)
+210 0x3480 // B & 0x7F00
+211 0x7F00 // Operand #0x7F00 (32512)
+212 0x3580 // EB >> 8
+214 0x3580 // EB >> 8
+216 0x3580 // EB >> 8
+218 0x3580 // EB >> 8
+220 0x3580 // EB >> 8
+222 0x3580 // EB >> 8
+224 0x3580 // EB >> 8
+226 0x3580 // EB >> 8
+228 0x2800 // Speichere EB
+229 0x03A5 // Operand #0x03A5 (933)
+230 0x1800 // Lade A fuer MA
+231 0x039F // Operand #0x039F (927)
+232 0x3480 // A & 0xFF
+233 0x00FF // Operand #0x00FF (255)
+234 0x34C0 // MA = (A & 0xFF) | 0x0100
+235 0x0100 // Operand #0x0100 (256)
+236 0x2800 // Speichere MA
+237 0x03A6 // Operand #0x03A6 (934)
+238 0x1800 // Lade B fuer MB
+239 0x03A0 // Operand #0x03A0 (928)
+240 0x3480 // B & 0xFF
+241 0x00FF // Operand #0x00FF (255)
+242 0x34C0 // MB = (B & 0xFF) | 0x0100
+243 0x0100 // Operand #0x0100 (256)
+244 0x2800 // Speichere MB
+245 0x03A7 // Operand #0x03A7 (935)
+246 0x1800 // Lade EB
+247 0x03A5 // Operand #0x03A5 (933)
+248 0x3540 // ~EB
+250 0x3440 // -EB
+251 0x0001 // Operand #0x0001 (1)
+252 0x2800 // Patch -EB
+253 0x0101 // Operand #0x0101 (257)
+254 0x1800 // Lade EA
+255 0x03A4 // Operand #0x03A4 (932)
+256 0x3440 // dE = EA - EB
+258 0x4018 // Wenn dE == 0 -> Keine Ausrichtung noetig
+259 0x011C // Operand #0x0000 (0)
+260 0x2800 // Speichere dE
+261 0x03A5 // Operand #0x03A5 (933)
+262 0x3440 // dE - 9
+263 0xFFF7 // Operand #0xFFF7 (65527)
+264 0x4010 // Wenn dE < 9 -> Mantissen-Shift-Schleife
+265 0x010C // Operand #0x0000 (0)
+266 0x4000 // dE >= 9 -> Return A
+267 0x015C // Operand #0x0000 (0)
+268 0x1800 // Lade MB
+269 0x03A7 // Operand #0x03A7 (935)
+270 0x3580 // MB >> 1
+272 0x2800 // Speichere MB
+273 0x03A7 // Operand #0x03A7 (935)
+274 0x1800 // Lade dE
+275 0x03A5 // Operand #0x03A5 (933)
+276 0x3440 // dE - 1
+277 0xFFFF // Operand #0xFFFF (65535)
+278 0x2800 // Speichere dE
+279 0x03A5 // Operand #0x03A5 (933)
+280 0x4018 // Wenn dE == 0 -> Ausrichtung fertig
+281 0x011C // Operand #0x0000 (0)
+282 0x4000 // Loop Mantissen-Shift
+283 0x010C // Operand #0x010C (268)
+284 0x1800 // Lade signB
+285 0x03A3 // Operand #0x03A3 (931)
+286 0x2800 // Patch signB
+287 0x0123 // Operand #0x0123 (291)
+288 0x1800 // Lade signA
+289 0x03A2 // Operand #0x03A2 (930)
+290 0x3440 // signA + signB (XOR auf Bit 15)
+292 0x4018 // Wenn gleiche Vorzeichen -> Addiere Mantissen
+293 0x0128 // Operand #0x0000 (0)
+294 0x4000 // Unterschiedliche Vorzeichen -> Subtrahiere Mantissen
+295 0x0134 // Operand #0x0000 (0)
+296 0x1800 // Lade MB
+297 0x03A7 // Operand #0x03A7 (935)
+298 0x2800 // Patch +MB
+299 0x012F // Operand #0x012F (303)
+300 0x1800 // Lade MA
+301 0x03A6 // Operand #0x03A6 (934)
+302 0x3440 // MR = MA + MB
+304 0x2800 // Speichere MR
+305 0x03A6 // Operand #0x03A6 (934)
+306 0x4000 // Sprung zu gemeinsamem Norm+Pack
+307 0x02C6 // Operand #0x0000 (0)
+308 0x1800 // Lade MB
+309 0x03A7 // Operand #0x03A7 (935)
+310 0x3540 // ~MB
+312 0x3440 // -MB
+313 0x0001 // Operand #0x0001 (1)
+314 0x2800 // Patch -MB
+315 0x013F // Operand #0x013F (319)
+316 0x1800 // Lade MA
+317 0x03A6 // Operand #0x03A6 (934)
+318 0x3440 // MR = MA - MB
+320 0x4018 // Wenn MR == 0 -> Return 0.0
+321 0x0310 // Operand #0x0000 (0)
+322 0x2800 // Speichere MR
+323 0x03A6 // Operand #0x03A6 (934)
+324 0x1800 // Lade MR fuer Normierung
+325 0x03A6 // Operand #0x03A6 (934)
+326 0x3480 // Pruefe implizite 1 (Bit 8)
+327 0x0100 // Operand #0x0100 (256)
+328 0x4018 // Wenn Bit 8 == 0 -> Links-Shift
+329 0x014C // Operand #0x0000 (0)
+330 0x4000 // Bit 8 == 1 -> Packen
+331 0x02E7 // Operand #0x0000 (0)
+332 0x1800 // Lade EA
+333 0x03A4 // Operand #0x03A4 (932)
+334 0x3440 // EA - 1
+335 0xFFFF // Operand #0xFFFF (65535)
+336 0x4018 // Wenn EA == 0 -> Underflow 0.0
+337 0x0310 // Operand #0x0000 (0)
+338 0x2800 // Speichere EA
+339 0x03A4 // Operand #0x03A4 (932)
+340 0x1800 // Lade MR
+341 0x03A6 // Operand #0x03A6 (934)
+342 0x35C0 // MR << 1
+344 0x2800 // Speichere MR
+345 0x03A6 // Operand #0x03A6 (934)
+346 0x4000 // Loop Normierung
+347 0x0144 // Operand #0x0144 (324)
+348 0x1800 // Return A
+349 0x039F // Operand #0x039F (927)
+350 0x6000 // RETURN __f16_add (A)
+351 0x1800 // Return B
+352 0x03A0 // Operand #0x03A0 (928)
+353 0x6000 // RETURN __f16_add (B)
+354 0x1800 // __f16_mul: Lade A
+355 0x039F // Operand #0x039F (927)
+356 0x3480 // |A|
+357 0x7FFF // Operand #0x7FFF (32767)
+358 0x4018 // Wenn |A| == 0 -> Return 0.0
+359 0x0310 // Operand #0x0000 (0)
+360 0x1800 // __f16_mul: Lade B
+361 0x03A0 // Operand #0x03A0 (928)
+362 0x3480 // |B|
+363 0x7FFF // Operand #0x7FFF (32767)
+364 0x4018 // Wenn |B| == 0 -> Return 0.0
+365 0x0310 // Operand #0x0000 (0)
+366 0x1800 // Lade A fuer Sign
+367 0x039F // Operand #0x039F (927)
+368 0x3480 // A & 0x8000
+369 0x8000 // Operand #0x8000 (32768)
+370 0x2800 // signR = signA
+371 0x03A2 // Operand #0x03A2 (930)
+372 0x1800 // Lade B fuer Sign
+373 0x03A0 // Operand #0x03A0 (928)
+374 0x4010 // Wenn B < 0 -> Toggle signR
+375 0x017A // Operand #0x0000 (0)
+376 0x4000 // Weiter zu Exponenten
+377 0x0180 // Operand #0x0000 (0)
+378 0x1800 // Lade signR
+379 0x03A2 // Operand #0x03A2 (930)
+380 0x3440 // signR ^ 0x8000
+381 0x8000 // Operand #0x8000 (32768)
+382 0x2800 // Speichere signR
+383 0x03A2 // Operand #0x03A2 (930)
+384 0x1800 // Lade A fuer EA
+385 0x039F // Operand #0x039F (927)
+386 0x3480 // A & 0x7F00
+387 0x7F00 // Operand #0x7F00 (32512)
+388 0x3580 // EA >> 8
+390 0x3580 // EA >> 8
+392 0x3580 // EA >> 8
+394 0x3580 // EA >> 8
+396 0x3580 // EA >> 8
+398 0x3580 // EA >> 8
+400 0x3580 // EA >> 8
+402 0x3580 // EA >> 8
+404 0x2800 // Speichere EA
+405 0x03A4 // Operand #0x03A4 (932)
+406 0x1800 // Lade B fuer EB
+407 0x03A0 // Operand #0x03A0 (928)
+408 0x3480 // B & 0x7F00
+409 0x7F00 // Operand #0x7F00 (32512)
+410 0x3580 // EB >> 8
+412 0x3580 // EB >> 8
+414 0x3580 // EB >> 8
+416 0x3580 // EB >> 8
+418 0x3580 // EB >> 8
+420 0x3580 // EB >> 8
+422 0x3580 // EB >> 8
+424 0x3580 // EB >> 8
+426 0x2800 // Patch +EB
+427 0x01AF // Operand #0x01AF (431)
+428 0x1800 // Lade EA
+429 0x03A4 // Operand #0x03A4 (932)
+430 0x3440 // EA + EB
+432 0x3440 // EA + EB - 63 (Bias)
+433 0xFFC1 // Operand #0xFFC1 (65473)
+434 0x2800 // Speichere ER
+435 0x03A4 // Operand #0x03A4 (932)
+436 0x1800 // Lade A fuer fA
+437 0x039F // Operand #0x039F (927)
+438 0x3480 // fA = A & 0xFF
+439 0x00FF // Operand #0x00FF (255)
+440 0x2800 // Speichere fA
+441 0x03A6 // Operand #0x03A6 (934)
+442 0x2800 // fA_shift = fA
+443 0x039F // Operand #0x039F (927)
+444 0x1800 // Lade B fuer fB
+445 0x03A0 // Operand #0x03A0 (928)
+446 0x3480 // fB = B & 0xFF
+447 0x00FF // Operand #0x00FF (255)
+448 0x2800 // Speichere fB
+449 0x03A7 // Operand #0x03A7 (935)
+450 0x2800 // fB_shift = fB
+451 0x03A0 // Operand #0x03A0 (928)
+452 0x1400 // prod = 0
+454 0x2800 // Init prod = 0
+455 0x03A3 // Operand #0x03A3 (931)
+456 0x1800 // Lade fB_shift
+457 0x03A0 // Operand #0x03A0 (928)
+458 0x4018 // Wenn fB == 0 -> Skip Loop
+459 0x01E8 // Operand #0x0000 (0)
+460 0x4020 // Wenn LSB(fB) == 0 -> Skip Add
+461 0x01D8 // Operand #0x0000 (0)
+462 0x1800 // Lade fA_shift
+463 0x039F // Operand #0x039F (927)
+464 0x2800 // Patch +fA_shift
+465 0x01D5 // Operand #0x01D5 (469)
+466 0x1800 // Lade prod
+467 0x03A3 // Operand #0x03A3 (931)
+468 0x3440 // prod + fA_shift
+470 0x2800 // Speichere prod
+471 0x03A3 // Operand #0x03A3 (931)
+472 0x1800 // Lade fA_shift
+473 0x039F // Operand #0x039F (927)
+474 0x35C0 // fA_shift << 1
+476 0x2800 // Speichere fA_shift
+477 0x039F // Operand #0x039F (927)
+478 0x1800 // Lade fB_shift
+479 0x03A0 // Operand #0x03A0 (928)
+480 0x3580 // fB_shift >> 1
+482 0x4018 // Wenn fB_shift == 0 -> Kombiniere
+483 0x01E8 // Operand #0x0000 (0)
+484 0x2800 // Speichere fB_shift
+485 0x03A0 // Operand #0x03A0 (928)
+486 0x4000 // Loop __f16_mul
+487 0x01CC // Operand #0x01CC (460)
+488 0x1800 // Lade prod
+489 0x03A3 // Operand #0x03A3 (931)
+490 0x3580 // prod >> 8
+492 0x3580 // prod >> 8
+494 0x3580 // prod >> 8
+496 0x3580 // prod >> 8
+498 0x3580 // prod >> 8
+500 0x3580 // prod >> 8
+502 0x3580 // prod >> 8
+504 0x3580 // prod >> 8
+506 0x3440 // 256 + (prod >> 8)
+507 0x0100 // Operand #0x0100 (256)
+508 0x2800 // Speichere Zwischenwert
+509 0x03A3 // Operand #0x03A3 (931)
+510 0x1800 // Lade fA
+511 0x03A6 // Operand #0x03A6 (934)
+512 0x2800 // Patch +fA
+513 0x0205 // Operand #0x0205 (517)
+514 0x1800 // Lade Zwischenwert
+515 0x03A3 // Operand #0x03A3 (931)
+516 0x3440 // + fA
+518 0x2800 // Speichere Zwischenwert
+519 0x03A3 // Operand #0x03A3 (931)
+520 0x1800 // Lade fB
+521 0x03A7 // Operand #0x03A7 (935)
+522 0x2800 // Patch +fB
+523 0x020F // Operand #0x020F (527)
+524 0x1800 // Lade Zwischenwert
+525 0x03A3 // Operand #0x03A3 (931)
+526 0x3440 // MR = 256 + fA + fB + (prod >> 8)
+528 0x2800 // Speichere MR
+529 0x03A6 // Operand #0x03A6 (934)
+530 0x4000 // Sprung zu gemeinsamem Norm+Pack
+531 0x02C6 // Operand #0x0000 (0)
+532 0x1800 // __f16_div: Lade A fuer Sign
+533 0x039F // Operand #0x039F (927)
+534 0x3480 // A & 0x8000
+535 0x8000 // Operand #0x8000 (32768)
+536 0x2800 // signR = signA
+537 0x03A2 // Operand #0x03A2 (930)
+538 0x1800 // Lade B fuer Sign
+539 0x03A0 // Operand #0x03A0 (928)
+540 0x4010 // Wenn B < 0 -> Toggle signR
+541 0x0220 // Operand #0x0000 (0)
+542 0x4000 // Weiter zu Zero-Check
+543 0x0226 // Operand #0x0000 (0)
+544 0x1800 // Lade signR
+545 0x03A2 // Operand #0x03A2 (930)
+546 0x3440 // signR ^ 0x8000
+547 0x8000 // Operand #0x8000 (32768)
+548 0x2800 // Speichere signR
+549 0x03A2 // Operand #0x03A2 (930)
+550 0x1800 // Lade A
+551 0x039F // Operand #0x039F (927)
+552 0x3480 // |A|
+553 0x7FFF // Operand #0x7FFF (32767)
+554 0x4018 // Wenn |A| == 0 -> Return 0.0
+555 0x0310 // Operand #0x0000 (0)
+556 0x1800 // Lade B
+557 0x03A0 // Operand #0x03A0 (928)
+558 0x3480 // |B|
+559 0x7FFF // Operand #0x7FFF (32767)
+560 0x4018 // Wenn |B| == 0 -> Division durch 0 (Saettigung)
+561 0x02E2 // Operand #0x0000 (0)
+562 0x1800 // Lade A fuer EA
+563 0x039F // Operand #0x039F (927)
+564 0x3480 // A & 0x7F00
+565 0x7F00 // Operand #0x7F00 (32512)
+566 0x3580 // EA >> 8
+568 0x3580 // EA >> 8
+570 0x3580 // EA >> 8
+572 0x3580 // EA >> 8
+574 0x3580 // EA >> 8
+576 0x3580 // EA >> 8
+578 0x3580 // EA >> 8
+580 0x3580 // EA >> 8
+582 0x2800 // Speichere EA
+583 0x03A4 // Operand #0x03A4 (932)
+584 0x1800 // Lade B fuer EB
+585 0x03A0 // Operand #0x03A0 (928)
+586 0x3480 // B & 0x7F00
+587 0x7F00 // Operand #0x7F00 (32512)
+588 0x3580 // EB >> 8
+590 0x3580 // EB >> 8
+592 0x3580 // EB >> 8
+594 0x3580 // EB >> 8
+596 0x3580 // EB >> 8
+598 0x3580 // EB >> 8
+600 0x3580 // EB >> 8
+602 0x3580 // EB >> 8
+604 0x3540 // ~EB
+606 0x3440 // -EB
+607 0x0001 // Operand #0x0001 (1)
+608 0x2800 // Patch -EB
+609 0x0265 // Operand #0x0265 (613)
+610 0x1800 // Lade EA
+611 0x03A4 // Operand #0x03A4 (932)
+612 0x3440 // EA - EB
+614 0x3440 // EA - EB + 63
+615 0x003F // Operand #0x003F (63)
+616 0x2800 // Speichere ER
+617 0x03A4 // Operand #0x03A4 (932)
+618 0x1800 // Lade A fuer MA
+619 0x039F // Operand #0x039F (927)
+620 0x3480 // A & 0xFF
+621 0x00FF // Operand #0x00FF (255)
+622 0x34C0 // MA = (A & 0xFF) | 0x0100
+623 0x0100 // Operand #0x0100 (256)
+624 0x2800 // Speichere MA
+625 0x03A6 // Operand #0x03A6 (934)
+626 0x1800 // Lade B fuer MB
+627 0x03A0 // Operand #0x03A0 (928)
+628 0x3480 // B & 0xFF
+629 0x00FF // Operand #0x00FF (255)
+630 0x34C0 // MB = (B & 0xFF) | 0x0100
+631 0x0100 // Operand #0x0100 (256)
+632 0x2800 // Speichere MB
+633 0x03A7 // Operand #0x03A7 (935)
+634 0x3540 // ~MB
+636 0x3440 // -MB
+637 0x0001 // Operand #0x0001 (1)
+638 0x2800 // Patch MA - MB
+639 0x0287 // Operand #0x0000 (0)
+640 0x2800 // Patch 2*MA - MB
+641 0x0293 // Operand #0x0000 (0)
+642 0x2800 // Patch Loop rem - MB
+643 0x02B1 // Operand #0x0000 (0)
+644 0x1800 // Lade MA
+645 0x03A6 // Operand #0x03A6 (934)
+646 0x3440 // MA - MB
+648 0x4010 // Wenn MA < MB -> Vorab-Shift MA << 1 und ER--
+649 0x028E // Operand #0x0000 (0)
+650 0x2800 // rem = MA - MB
+651 0x03A5 // Operand #0x03A5 (933)
+652 0x4000 // Starte 8-Bit Divisionsschleife
+653 0x029C // Operand #0x0000 (0)
+654 0x1800 // Lade MA
+655 0x03A6 // Operand #0x03A6 (934)
+656 0x35C0 // 2 * MA
+658 0x3440 // 2 * MA - MB
+660 0x2800 // rem = 2*MA - MB
+661 0x03A5 // Operand #0x03A5 (933)
+662 0x1800 // Lade ER
+663 0x03A4 // Operand #0x03A4 (932)
+664 0x3440 // ER - 1
+665 0xFFFF // Operand #0xFFFF (65535)
+666 0x2800 // Speichere ER
+667 0x03A4 // Operand #0x03A4 (932)
+668 0x1400 // quot = 1 (implizite 1)
+669 0x0001 // Operand #0x0001 (1)
+670 0x2800 // Speichere quot
+671 0x03A6 // Operand #0x03A6 (934)
+672 0x1400 // cnt = 8
+673 0x0008 // Operand #0x0008 (8)
+674 0x2800 // Speichere cnt
+675 0x03A3 // Operand #0x03A3 (931)
+676 0x1800 // Lade quot
+677 0x03A6 // Operand #0x03A6 (934)
+678 0x35C0 // quot << 1
+680 0x2800 // Speichere quot
+681 0x03A6 // Operand #0x03A6 (934)
+682 0x1800 // Lade rem
+683 0x03A5 // Operand #0x03A5 (933)
+684 0x35C0 // rem << 1
+686 0x2800 // Speichere rem << 1
+687 0x03A5 // Operand #0x03A5 (933)
+688 0x3440 // (rem << 1) - MB
+690 0x4010 // Wenn rem < MB -> Bit 0 bleibt 0
+691 0x02BC // Operand #0x0000 (0)
+692 0x2800 // rem = (rem << 1) - MB
+693 0x03A5 // Operand #0x03A5 (933)
+694 0x1800 // Lade quot
+695 0x03A6 // Operand #0x03A6 (934)
+696 0x34C0 // quot |= 1
+697 0x0001 // Operand #0x0001 (1)
+698 0x2800 // Speichere quot
+699 0x03A6 // Operand #0x03A6 (934)
+700 0x1800 // Lade cnt
+701 0x03A3 // Operand #0x03A3 (931)
+702 0x3440 // cnt - 1
+703 0xFFFF // Operand #0xFFFF (65535)
+704 0x2800 // Speichere cnt
+705 0x03A3 // Operand #0x03A3 (931)
+706 0x4018 // Wenn cnt == 0 -> Pruefe Exponent und Packen
+707 0x02D8 // Operand #0x0000 (0)
+708 0x4000 // Loop __f16_div
+709 0x02A4 // Operand #0x02A4 (676)
+710 0x1800 // Lade MR fuer Bit-9 Check
+711 0x03A6 // Operand #0x03A6 (934)
+712 0x3480 // Pruefe Carry in Bit 9 (MR >= 512)
+713 0x0200 // Operand #0x0200 (512)
+714 0x4018 // Wenn < 512 -> Pruefe Exponent
+715 0x02D8 // Operand #0x0000 (0)
+716 0x1800 // Lade MR
+717 0x03A6 // Operand #0x03A6 (934)
+718 0x3580 // MR >> 1
+720 0x2800 // Speichere normiertes MR
+721 0x03A6 // Operand #0x03A6 (934)
+722 0x1800 // Lade ER
+723 0x03A4 // Operand #0x03A4 (932)
+724 0x3440 // ER + 1
+725 0x0001 // Operand #0x0001 (1)
+726 0x2800 // Speichere ER
+727 0x03A4 // Operand #0x03A4 (932)
+728 0x1800 // Lade ER
+729 0x03A4 // Operand #0x03A4 (932)
+730 0x4018 // Wenn ER == 0 -> Underflow 0.0
+731 0x0310 // Operand #0x0000 (0)
+732 0x4010 // Wenn ER < 0 -> Underflow 0.0
+733 0x0310 // Operand #0x0000 (0)
+734 0x3480 // Pruefe ER >= 128
+735 0xFF80 // Operand #0xFF80 (65408)
+736 0x4018 // Kein Overflow -> Packen
+737 0x02E7 // Operand #0x0000 (0)
+738 0x1800 // Lade signR bei Overflow
+739 0x03A2 // Operand #0x03A2 (930)
+740 0x34C0 // Saettigung signR | 0x7FFF
+741 0x7FFF // Operand #0x7FFF (32767)
+742 0x6000 // RETURN __f16 (ovf)
+743 0x1800 // Lade ER
+744 0x03A4 // Operand #0x03A4 (932)
+745 0x35C0 // ER << 8
+747 0x35C0 // ER << 8
+749 0x35C0 // ER << 8
+751 0x35C0 // ER << 8
+753 0x35C0 // ER << 8
+755 0x35C0 // ER << 8
+757 0x35C0 // ER << 8
+759 0x35C0 // ER << 8
+761 0x2800 // Speichere ER << 8
+762 0x03A4 // Operand #0x03A4 (932)
+763 0x1800 // Lade MR
+764 0x03A6 // Operand #0x03A6 (934)
+765 0x3480 // MR & 0xFF
+766 0x00FF // Operand #0x00FF (255)
+767 0x2800 // Patch Mantisse
+768 0x0304 // Operand #0x0304 (772)
+769 0x1800 // Lade ER << 8
+770 0x03A4 // Operand #0x03A4 (932)
+771 0x3440 // (ER << 8) | (MR & 0xFF)
+773 0x2800 // Speichere Betrag
+774 0x03A4 // Operand #0x03A4 (932)
+775 0x1800 // Lade signR
+776 0x03A2 // Operand #0x03A2 (930)
+777 0x2800 // Patch signR
+778 0x030E // Operand #0x030E (782)
+779 0x1800 // Lade Betrag
+780 0x03A4 // Operand #0x03A4 (932)
+781 0x3440 // signR | (ER << 8) | (MR & 0xFF)
+783 0x6000 // RETURN __f16
+784 0x1400 // Return 0.0
+786 0x6000 // RETURN __f16 (0.0)
+787 0x1800 // __pset: Lade Y
+788 0x039C // Operand #0x039C (924)
+789 0x35C0 // Y * 2
+791 0x3440 // Base + Y*2 + 1 (Default Word 1)
+792 0x03C1 // Operand #0x03C1 (961)
+793 0x2800 // Speichere wordAddr
+794 0x03A8 // Operand #0x03A8 (936)
+795 0x1800 // Lade X
+796 0x039B // Operand #0x039B (923)
+797 0x3480 // X >= 16 ?
+798 0x0010 // Operand #0x0010 (16)
+799 0x4018 // Wenn X < 16 -> Word 1 bereit
+800 0x0327 // Operand #0x0000 (0)
+801 0x1800 // Lade wordAddr
+802 0x03A8 // Operand #0x03A8 (936)
+803 0x3440 // wordAddr - 1 -> Word 0
+804 0xFFFF // Operand #0xFFFF (65535)
+805 0x2800 // Speichere Word 0
+806 0x03A8 // Operand #0x03A8 (936)
+807 0x1800 // Lade X
+808 0x039B // Operand #0x039B (923)
+809 0x3480 // X & 15 (Bit-Index)
+810 0x000F // Operand #0x000F (15)
+811 0x3440 // Addiere Tabellenbasis
+812 0x0358 // Operand #0x0000 (0)
+813 0x2800 // Speichere Zeiger auf Maske
+814 0x03AB // Operand #0x03AB (939)
+815 0x1C00 // Lade Maske via LDAMM
+816 0x03AB // Operand #0x03AB (939)
+817 0x2800 // Speichere Maske
+818 0x03A9 // Operand #0x03A9 (937)
+819 0x1C00 // Lade aktuellen Wortwert via LDAMM
+820 0x03A8 // Operand #0x03A8 (936)
+821 0x2800 // Speichere currWord
+822 0x03AA // Operand #0x03AA (938)
+823 0x1800 // Lade Color
+824 0x039D // Operand #0x039D (925)
+825 0x4018 // Wenn Color == 0 -> Clear Pixel
+826 0x0347 // Operand #0x0000 (0)
+827 0x1800 // Lade Maske
+828 0x03A9 // Operand #0x03A9 (937)
+829 0x2800 // Patch OR-Operand
+830 0x0342 // Operand #0x0342 (834)
+831 0x1800 // Lade currWord
+832 0x03AA // Operand #0x03AA (938)
+833 0x34C0 // currWord | mask
+835 0x2800 // Speichere neues currWord
+836 0x03AA // Operand #0x03AA (938)
+837 0x4000 // Sprung zu Write
+838 0x0353 // Operand #0x0000 (0)
+839 0x1800 // Lade Maske
+840 0x03A9 // Operand #0x03A9 (937)
+841 0x3540 // ~mask (invertiert)
+843 0x2800 // Patch AND-Operand
+844 0x0350 // Operand #0x0350 (848)
+845 0x1800 // Lade currWord
+846 0x03AA // Operand #0x03AA (938)
+847 0x3480 // currWord & ~mask
+849 0x2800 // Speichere neues currWord
+850 0x03AA // Operand #0x03AA (938)
+851 0x1800 // Lade geändertes Wort
+852 0x03AA // Operand #0x03AA (938)
+853 0x2C00 // Schreibe Pixelwort in Display via STAMM
+854 0x03A8 // Operand #0x03A8 (936)
+855 0x6000 // RETURN __pset
+856 0x8000 // Maske fuer Bit 15
+857 0x4000 // Maske fuer Bit 14
+858 0x2000 // Maske fuer Bit 13
+859 0x1000 // Maske fuer Bit 12
+860 0x0800 // Maske fuer Bit 11
+861 0x0400 // Maske fuer Bit 10
+862 0x0200 // Maske fuer Bit 9
+863 0x0100 // Maske fuer Bit 8
+864 0x0080 // Maske fuer Bit 7
+865 0x0040 // Maske fuer Bit 6
+866 0x0020 // Maske fuer Bit 5
+867 0x0010 // Maske fuer Bit 4
+868 0x0008 // Maske fuer Bit 3
+869 0x0004 // Maske fuer Bit 2
+870 0x0002 // Maske fuer Bit 1
+871 0x0001 // Maske fuer Bit 0
+
+RUN

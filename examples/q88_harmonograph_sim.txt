@@ -1,0 +1,665 @@
+// ============================================================
+// ⚡ Generiert von Clack-BASIC Cross-Compiler (Arduino Loader Format)
+// ============================================================
+CLR
+
+0 0x4000 // Initialer Sprung über Hardware I/O (Addr 2=OUT, 3=IN)
+1 0x0004 // Operand #0x0000 (0)
+4 0x1400 // Q8.8 Konstante 3328
+5 0x0D00 // Operand #0x0D00 (3328)
+6 0x2800 // LET X = Accu
+7 0x0398 // Operand #0x0398 (920)
+8 0x1400 // Q8.8 Konstante 0
+10 0x2800 // LET Y = Accu
+11 0x0399 // Operand #0x0399 (921)
+12 0x1400 // Q8.8 Konstante 0
+14 0x2800 // LET VX = Accu
+15 0x039A // Operand #0x039A (922)
+16 0x1400 // Q8.8 Konstante 832
+17 0x0340 // Operand #0x0340 (832)
+18 0x2800 // LET VY = Accu
+19 0x039B // Operand #0x039B (923)
+20 0x1400 // Konstante 29
+21 0x001D // Operand #0x001D (29)
+22 0x2800 // LET PX = Accu
+23 0x039C // Operand #0x039C (924)
+24 0x1400 // Konstante 16
+25 0x0010 // Operand #0x0010 (16)
+26 0x2800 // LET PY = Accu
+27 0x039D // Operand #0x039D (925)
+28 0x1400 // Konstante 1
+29 0x0001 // Operand #0x0001 (1)
+30 0x2800 // FOR I Startwert
+31 0x039E // Operand #0x039E (926)
+32 0x1800 // Pruefe FOR Limit (optimiert)
+33 0x039E // Operand #0x039E (926)
+34 0x3540 // ~Var
+36 0x3440 // ~Var + 91 (Endwert-Check)
+37 0x005B // Operand #0x005B (91)
+38 0x4010 // FOR Beenden wenn Var > End
+39 0x00E6 // Operand #0x0000 (0)
+40 0x1800 // Variable VX
+41 0x039A // Operand #0x039A (922)
+42 0x2800 // Q8.8 Multiplikand __r0
+43 0x039F // Operand #0x039F (927)
+44 0x1400 // Q8.8 Konstante 2
+45 0x0002 // Operand #0x0002 (2)
+46 0x2800 // Q8.8 Multiplikator __r1
+47 0x03A0 // Operand #0x03A0 (928)
+48 0x5000 // CALL __fmul_q88
+49 0x00EA // Operand #0x0000 (0)
+50 0x2800 // Q8.8 Rechter Operand
+51 0x03B8 // Operand #0x03B8 (952)
+52 0x1800 // Variable X
+53 0x0398 // Operand #0x0398 (920)
+54 0x2800 // Q8.8 Multiplikand __r0
+55 0x039F // Operand #0x039F (927)
+56 0x1400 // Q8.8 Konstante 32
+57 0x0020 // Operand #0x0020 (32)
+58 0x2800 // Q8.8 Multiplikator __r1
+59 0x03A0 // Operand #0x03A0 (928)
+60 0x5000 // CALL __fmul_q88
+61 0x00EA // Operand #0x0000 (0)
+62 0x2800 // Q8.8 Rechter Operand
+63 0x03B9 // Operand #0x03B9 (953)
+64 0x1800 // Variable VX
+65 0x039A // Operand #0x039A (922)
+66 0x2800 // Temp A sichern
+67 0x03BA // Operand #0x03BA (954)
+68 0x1800 // Lade B
+69 0x03B9 // Operand #0x03B9 (953)
+70 0x3540 // ~B
+72 0x3440 // -B
+73 0x0001 // Operand #0x0001 (1)
+74 0x2800 // Patch ADD Operand mit -B
+75 0x004F // Operand #0x004F (79)
+76 0x1800 // Lade A zurueck
+77 0x03BA // Operand #0x03BA (954)
+78 0x3440 // Q8.8 A - B
+80 0x2800 // Temp A sichern
+81 0x03BB // Operand #0x03BB (955)
+82 0x1800 // Lade B
+83 0x03B8 // Operand #0x03B8 (952)
+84 0x3540 // ~B
+86 0x3440 // -B
+87 0x0001 // Operand #0x0001 (1)
+88 0x2800 // Patch ADD Operand mit -B
+89 0x005D // Operand #0x005D (93)
+90 0x1800 // Lade A zurueck
+91 0x03BB // Operand #0x03BB (955)
+92 0x3440 // Q8.8 A - B
+94 0x2800 // LET VX = Accu
+95 0x039A // Operand #0x039A (922)
+96 0x1800 // Lade VX fuer Q8.8 ADD Patch
+97 0x039A // Operand #0x039A (922)
+98 0x2800 // Patch ADD Operand
+99 0x0067 // Operand #0x0067 (103)
+100 0x1800 // Variable X
+101 0x0398 // Operand #0x0398 (920)
+102 0x3440 // Q8.8 A + VX
+104 0x2800 // LET X = Accu
+105 0x0398 // Operand #0x0398 (920)
+106 0x1800 // Variable VY
+107 0x039B // Operand #0x039B (923)
+108 0x2800 // Q8.8 Multiplikand __r0
+109 0x039F // Operand #0x039F (927)
+110 0x1400 // Q8.8 Konstante 2
+111 0x0002 // Operand #0x0002 (2)
+112 0x2800 // Q8.8 Multiplikator __r1
+113 0x03A0 // Operand #0x03A0 (928)
+114 0x5000 // CALL __fmul_q88
+115 0x00EA // Operand #0x0000 (0)
+116 0x2800 // Q8.8 Rechter Operand
+117 0x03BC // Operand #0x03BC (956)
+118 0x1800 // Variable Y
+119 0x0399 // Operand #0x0399 (921)
+120 0x2800 // Q8.8 Multiplikand __r0
+121 0x039F // Operand #0x039F (927)
+122 0x1400 // Q8.8 Konstante 16
+123 0x0010 // Operand #0x0010 (16)
+124 0x2800 // Q8.8 Multiplikator __r1
+125 0x03A0 // Operand #0x03A0 (928)
+126 0x5000 // CALL __fmul_q88
+127 0x00EA // Operand #0x0000 (0)
+128 0x2800 // Q8.8 Rechter Operand
+129 0x03BD // Operand #0x03BD (957)
+130 0x1800 // Variable VY
+131 0x039B // Operand #0x039B (923)
+132 0x2800 // Temp A sichern
+133 0x03BE // Operand #0x03BE (958)
+134 0x1800 // Lade B
+135 0x03BD // Operand #0x03BD (957)
+136 0x3540 // ~B
+138 0x3440 // -B
+139 0x0001 // Operand #0x0001 (1)
+140 0x2800 // Patch ADD Operand mit -B
+141 0x0091 // Operand #0x0091 (145)
+142 0x1800 // Lade A zurueck
+143 0x03BE // Operand #0x03BE (958)
+144 0x3440 // Q8.8 A - B
+146 0x2800 // Temp A sichern
+147 0x03BF // Operand #0x03BF (959)
+148 0x1800 // Lade B
+149 0x03BC // Operand #0x03BC (956)
+150 0x3540 // ~B
+152 0x3440 // -B
+153 0x0001 // Operand #0x0001 (1)
+154 0x2800 // Patch ADD Operand mit -B
+155 0x009F // Operand #0x009F (159)
+156 0x1800 // Lade A zurueck
+157 0x03BF // Operand #0x03BF (959)
+158 0x3440 // Q8.8 A - B
+160 0x2800 // LET VY = Accu
+161 0x039B // Operand #0x039B (923)
+162 0x1800 // Lade VY fuer Q8.8 ADD Patch
+163 0x039B // Operand #0x039B (923)
+164 0x2800 // Patch ADD Operand
+165 0x00A9 // Operand #0x00A9 (169)
+166 0x1800 // Variable Y
+167 0x0399 // Operand #0x0399 (921)
+168 0x3440 // Q8.8 A + VY
+170 0x2800 // LET Y = Accu
+171 0x0399 // Operand #0x0399 (921)
+172 0x1800 // Variable X
+173 0x0398 // Operand #0x0398 (920)
+174 0x5000 // CALL __ftoi_q88
+175 0x01B1 // Operand #0x0000 (0)
+176 0x3440 // Accu + 16
+177 0x0010 // Operand #0x0010 (16)
+178 0x2800 // LET NX = Accu
+179 0x03A1 // Operand #0x03A1 (929)
+180 0x1800 // Variable Y
+181 0x0399 // Operand #0x0399 (921)
+182 0x5000 // CALL __ftoi_q88
+183 0x01B1 // Operand #0x0000 (0)
+184 0x3440 // Accu + 16
+185 0x0010 // Operand #0x0010 (16)
+186 0x2800 // LET NY = Accu
+187 0x03A2 // Operand #0x03A2 (930)
+188 0x1800 // Variable PX
+189 0x039C // Operand #0x039C (924)
+190 0x2800 // LINE X1
+191 0x03A3 // Operand #0x03A3 (931)
+192 0x1800 // Variable PY
+193 0x039D // Operand #0x039D (925)
+194 0x2800 // LINE Y1
+195 0x03A4 // Operand #0x03A4 (932)
+196 0x1800 // Variable NX
+197 0x03A1 // Operand #0x03A1 (929)
+198 0x2800 // LINE X2
+199 0x03A5 // Operand #0x03A5 (933)
+200 0x1800 // Variable NY
+201 0x03A2 // Operand #0x03A2 (930)
+202 0x2800 // LINE Y2
+203 0x03A6 // Operand #0x03A6 (934)
+204 0x1400 // Konstante 1
+205 0x0001 // Operand #0x0001 (1)
+206 0x2800 // LINE Color
+207 0x03A7 // Operand #0x03A7 (935)
+208 0x5000 // CALL __line
+209 0x01DD // Operand #0x0000 (0)
+210 0x1800 // Variable NX
+211 0x03A1 // Operand #0x03A1 (929)
+212 0x2800 // LET PX = Accu
+213 0x039C // Operand #0x039C (924)
+214 0x1800 // Variable NY
+215 0x03A2 // Operand #0x03A2 (930)
+216 0x2800 // LET PY = Accu
+217 0x039D // Operand #0x039D (925)
+218 0x1800 // Variable NX
+219 0x03A1 // Operand #0x03A1 (929)
+220 0x2800 // POKE [2] = Accu (direkt)
+221 0x0002 // Operand #0x0002 (2)
+222 0x1800 // Lade Zaehler
+223 0x039E // Operand #0x039E (926)
+224 0x3440 // Zaehler + 1
+225 0x0001 // Operand #0x0001 (1)
+226 0x2800 // Speichere Zaehler
+227 0x039E // Operand #0x039E (926)
+228 0x4000 // FOR Loop Sprung
+229 0x0020 // Operand #0x0000 (0)
+230 0x4000 // END / HALT
+231 0x00E6 // Operand #0x00E6 (230)
+232 0x4000 // Ende des Programms (Halt-Schleife)
+233 0x00E8 // Operand #0x00E8 (232)
+234 0x1400 // __fmul_q88: Init 0
+236 0x2800 // prod_lo = 0
+237 0x03A8 // Operand #0x03A8 (936)
+238 0x2800 // prod_hi = 0
+239 0x03AA // Operand #0x03AA (938)
+240 0x2800 // a_hi = 0
+241 0x03A9 // Operand #0x03A9 (937)
+242 0x2800 // sign = 0
+243 0x03AB // Operand #0x03AB (939)
+244 0x1800 // __fmul_q88: Lade A
+245 0x039F // Operand #0x039F (927)
+246 0x4018 // Wenn A == 0 -> Return 0
+247 0x01AE // Operand #0x0000 (0)
+248 0x4010 // Wenn A < 0 -> Negiere A
+249 0x00FC // Operand #0x0000 (0)
+250 0x4000 // Weiter zu B
+251 0x0106 // Operand #0x0000 (0)
+252 0x3540 // ~A
+254 0x3440 // |A| = -A
+255 0x0001 // Operand #0x0001 (1)
+256 0x2800 // Speichere |A|
+257 0x039F // Operand #0x039F (927)
+258 0x1400 // sign = 1
+259 0x0001 // Operand #0x0001 (1)
+260 0x2800 // Speichere sign
+261 0x03AB // Operand #0x03AB (939)
+262 0x1800 // __fmul_q88: Lade B
+263 0x03A0 // Operand #0x03A0 (928)
+264 0x4018 // Wenn B == 0 -> Return 0
+265 0x01AE // Operand #0x0000 (0)
+266 0x4010 // Wenn B < 0 -> Negiere B
+267 0x010E // Operand #0x0000 (0)
+268 0x4000 // Starte 32-Bit Shift-Add Loop
+269 0x011E // Operand #0x0000 (0)
+270 0x3540 // ~B
+272 0x3440 // |B| = -B
+273 0x0001 // Operand #0x0001 (1)
+274 0x2800 // Speichere |B|
+275 0x03A0 // Operand #0x03A0 (928)
+276 0x1800 // Lade sign
+277 0x03AB // Operand #0x03AB (939)
+278 0x3440 // sign + 1
+279 0x0001 // Operand #0x0001 (1)
+280 0x3480 // sign XOR 1
+281 0x0001 // Operand #0x0001 (1)
+282 0x2800 // Speichere sign
+283 0x03AB // Operand #0x03AB (939)
+284 0x1800 // Lade |B| fuer Loop
+285 0x03A0 // Operand #0x03A0 (928)
+286 0x4020 // Wenn LSB(B) == 0 -> Skip Add
+287 0x013E // Operand #0x0000 (0)
+288 0x1800 // Lade a_lo
+289 0x039F // Operand #0x039F (927)
+290 0x2800 // Patch ADD a_lo
+291 0x0127 // Operand #0x0127 (295)
+292 0x1800 // Lade prod_lo
+293 0x03A8 // Operand #0x03A8 (936)
+294 0x3440 // prod_lo + a_lo
+296 0x2800 // Speichere prod_lo
+297 0x03A8 // Operand #0x03A8 (936)
+298 0x4008 // Wenn Carry -> prod_hi++
+299 0x012E // Operand #0x0000 (0)
+300 0x4000 // Weiter zu prod_hi + a_hi
+301 0x0134 // Operand #0x0000 (0)
+302 0x1800 // Lade prod_hi
+303 0x03AA // Operand #0x03AA (938)
+304 0x3440 // prod_hi + 1
+305 0x0001 // Operand #0x0001 (1)
+306 0x2800 // Speichere prod_hi
+307 0x03AA // Operand #0x03AA (938)
+308 0x1800 // Lade a_hi
+309 0x03A9 // Operand #0x03A9 (937)
+310 0x2800 // Patch ADD a_hi
+311 0x013B // Operand #0x013B (315)
+312 0x1800 // Lade prod_hi
+313 0x03AA // Operand #0x03AA (938)
+314 0x3440 // prod_hi + a_hi
+316 0x2800 // Speichere prod_hi
+317 0x03AA // Operand #0x03AA (938)
+318 0x1800 // Lade B
+319 0x03A0 // Operand #0x03A0 (928)
+320 0x3580 // B >> 1
+322 0x4018 // Wenn B == 0 -> Skalierung
+323 0x0162 // Operand #0x0000 (0)
+324 0x2800 // Speichere B
+325 0x03A0 // Operand #0x03A0 (928)
+326 0x1800 // Lade a_hi
+327 0x03A9 // Operand #0x03A9 (937)
+328 0x35C0 // a_hi << 1
+330 0x2800 // Speichere a_hi
+331 0x03A9 // Operand #0x03A9 (937)
+332 0x1800 // Lade a_lo
+333 0x039F // Operand #0x039F (927)
+334 0x35C0 // a_lo << 1
+336 0x2800 // Speichere a_lo
+337 0x039F // Operand #0x039F (927)
+338 0x4008 // Wenn Carry aus a_lo -> a_hi |= 1
+339 0x0158 // Operand #0x0000 (0)
+340 0x1800 // Lade B fuer naechste Iteration
+341 0x03A0 // Operand #0x03A0 (928)
+342 0x4000 // Loop __fmul_q88
+343 0x011E // Operand #0x011E (286)
+344 0x1800 // Lade a_hi
+345 0x03A9 // Operand #0x03A9 (937)
+346 0x34C0 // a_hi | 1
+347 0x0001 // Operand #0x0001 (1)
+348 0x2800 // Speichere a_hi
+349 0x03A9 // Operand #0x03A9 (937)
+350 0x1800 // Lade B fuer naechste Iteration
+351 0x03A0 // Operand #0x03A0 (928)
+352 0x4000 // Loop __fmul_q88
+353 0x011E // Operand #0x011E (286)
+354 0x1800 // Lade prod_hi
+355 0x03AA // Operand #0x03AA (938)
+356 0x3480 // Pruefe Overflow (prod_hi >= 128)
+357 0xFF80 // Operand #0xFF80 (65408)
+358 0x4018 // Kein Overflow -> Kombiniere Bytes
+359 0x0172 // Operand #0x0000 (0)
+360 0x1800 // Lade sign bei Overflow
+361 0x03AB // Operand #0x03AB (939)
+362 0x4018 // Wenn positiv -> 0x7FFF
+363 0x016F // Operand #0x0000 (0)
+364 0x1400 // Overflow negativ -> 0x8000 (-128.0)
+365 0x8000 // Operand #0x8000 (32768)
+366 0x6000 // RETURN __fmul_q88 (ovf neg)
+367 0x1400 // Overflow positiv -> 0x7FFF (+127.996)
+368 0x7FFF // Operand #0x7FFF (32767)
+369 0x6000 // RETURN __fmul_q88 (ovf pos)
+370 0x1800 // Lade prod_hi
+371 0x03AA // Operand #0x03AA (938)
+372 0x35C0 // prod_hi << 8
+374 0x35C0 // prod_hi << 8
+376 0x35C0 // prod_hi << 8
+378 0x35C0 // prod_hi << 8
+380 0x35C0 // prod_hi << 8
+382 0x35C0 // prod_hi << 8
+384 0x35C0 // prod_hi << 8
+386 0x35C0 // prod_hi << 8
+388 0x2800 // Speichere prod_hi << 8
+389 0x03AA // Operand #0x03AA (938)
+390 0x1800 // Lade prod_lo
+391 0x03A8 // Operand #0x03A8 (936)
+392 0x3580 // prod_lo >> 8
+394 0x3580 // prod_lo >> 8
+396 0x3580 // prod_lo >> 8
+398 0x3580 // prod_lo >> 8
+400 0x3580 // prod_lo >> 8
+402 0x3580 // prod_lo >> 8
+404 0x3580 // prod_lo >> 8
+406 0x3580 // prod_lo >> 8
+408 0x2800 // Patch ADD (prod_lo >> 8)
+409 0x019D // Operand #0x019D (413)
+410 0x1800 // Lade (prod_hi << 8)
+411 0x03AA // Operand #0x03AA (938)
+412 0x3440 // (prod_hi << 8) + (prod_lo >> 8)
+414 0x2800 // Speichere Betrag
+415 0x03A8 // Operand #0x03A8 (936)
+416 0x1800 // Pruefe Vorzeichen
+417 0x03AB // Operand #0x03AB (939)
+418 0x4018 // Wenn positiv -> Fertig
+419 0x01AB // Operand #0x0000 (0)
+420 0x1800 // Lade Betrag
+421 0x03A8 // Operand #0x03A8 (936)
+422 0x3540 // ~Betrag
+424 0x3440 // -Betrag
+425 0x0001 // Operand #0x0001 (1)
+426 0x6000 // RETURN __fmul_q88 (negativ)
+427 0x1800 // Lade Ergebnis
+428 0x03A8 // Operand #0x03A8 (936)
+429 0x6000 // RETURN __fmul_q88
+430 0x1400 // Ergebnis = 0
+432 0x6000 // RETURN __fmul_q88 (0)
+433 0x4010 // __ftoi_q88: Wenn negativ -> Betrag schieben und negieren
+434 0x01C4 // Operand #0x0000 (0)
+435 0x3580 // Positiv >> 8
+437 0x3580 // Positiv >> 8
+439 0x3580 // Positiv >> 8
+441 0x3580 // Positiv >> 8
+443 0x3580 // Positiv >> 8
+445 0x3580 // Positiv >> 8
+447 0x3580 // Positiv >> 8
+449 0x3580 // Positiv >> 8
+451 0x6000 // RETURN __ftoi_q88 (positiv)
+452 0x3540 // ~Accu
+454 0x3440 // |Accu|
+455 0x0001 // Operand #0x0001 (1)
+456 0x3580 // |Accu| >> 8
+458 0x3580 // |Accu| >> 8
+460 0x3580 // |Accu| >> 8
+462 0x3580 // |Accu| >> 8
+464 0x3580 // |Accu| >> 8
+466 0x3580 // |Accu| >> 8
+468 0x3580 // |Accu| >> 8
+470 0x3580 // |Accu| >> 8
+472 0x3540 // ~(|Accu| >> 8)
+474 0x3440 // -(|Accu| >> 8)
+475 0x0001 // Operand #0x0001 (1)
+476 0x6000 // RETURN __ftoi_q88 (negativ)
+477 0x1800 // __line: Lade x1
+478 0x03A3 // Operand #0x03A3 (931)
+479 0x3540 // ~x1
+481 0x3440 // ~x1 + 1
+482 0x0001 // Operand #0x0001 (1)
+483 0x2800 // Patch x2 Subtraktion
+484 0x01E8 // Operand #0x01E8 (488)
+485 0x1800 // Lade x2
+486 0x03A5 // Operand #0x03A5 (933)
+487 0x3440 // x2 - x1
+489 0x4010 // Wenn x2 < x1 -> sx=-1
+490 0x01F3 // Operand #0x0000 (0)
+491 0x2800 // dx = x2 - x1
+492 0x03AC // Operand #0x03AC (940)
+493 0x1400 // sx = 1
+494 0x0001 // Operand #0x0001 (1)
+495 0x2800 // Speichere sx
+496 0x03AE // Operand #0x03AE (942)
+497 0x4000 // Weiter zu Y-Berechnung
+498 0x01FD // Operand #0x0000 (0)
+499 0x3540 // ~(x2 - x1)
+501 0x3440 // dx = abs(x2 - x1)
+502 0x0001 // Operand #0x0001 (1)
+503 0x2800 // Speichere dx
+504 0x03AC // Operand #0x03AC (940)
+505 0x1400 // sx = -1
+506 0xFFFF // Operand #0xFFFF (65535)
+507 0x2800 // Speichere sx
+508 0x03AE // Operand #0x03AE (942)
+509 0x1800 // Lade y1
+510 0x03A4 // Operand #0x03A4 (932)
+511 0x3540 // ~y1
+513 0x3440 // ~y1 + 1
+514 0x0001 // Operand #0x0001 (1)
+515 0x2800 // Patch y2 Subtraktion
+516 0x0208 // Operand #0x0208 (520)
+517 0x1800 // Lade y2
+518 0x03A6 // Operand #0x03A6 (934)
+519 0x3440 // y2 - y1
+521 0x4010 // Wenn y2 < y1 -> sy=-1
+522 0x0217 // Operand #0x0000 (0)
+523 0x3540 // ~(y2 - y1)
+525 0x3440 // dy = -abs(y2 - y1)
+526 0x0001 // Operand #0x0001 (1)
+527 0x2800 // Speichere dy
+528 0x03AD // Operand #0x03AD (941)
+529 0x1400 // sy = 1
+530 0x0001 // Operand #0x0001 (1)
+531 0x2800 // Speichere sy
+532 0x03AF // Operand #0x03AF (943)
+533 0x4000 // Weiter zu err-Berechnung
+534 0x021D // Operand #0x0000 (0)
+535 0x2800 // dy = y2 - y1 (negativ)
+536 0x03AD // Operand #0x03AD (941)
+537 0x1400 // sy = -1
+538 0xFFFF // Operand #0xFFFF (65535)
+539 0x2800 // Speichere sy
+540 0x03AF // Operand #0x03AF (943)
+541 0x1800 // Lade dy
+542 0x03AD // Operand #0x03AD (941)
+543 0x2800 // Patch dy Addition
+544 0x0224 // Operand #0x0224 (548)
+545 0x1800 // Lade dx
+546 0x03AC // Operand #0x03AC (940)
+547 0x3440 // dx + dy
+549 0x2800 // err = dx + dy
+550 0x03B0 // Operand #0x03B0 (944)
+551 0x1800 // Lade y1
+552 0x03A4 // Operand #0x03A4 (932)
+553 0x35C0 // y1 * 2
+555 0x3440 // DisplayBase + y1*2 + 1 (Default Word 1)
+556 0x03C1 // Operand #0x03C1 (961)
+557 0x2800 // Speichere wordAddr
+558 0x03B2 // Operand #0x03B2 (946)
+559 0x1800 // Lade x1
+560 0x03A3 // Operand #0x03A3 (931)
+561 0x3480 // x1 >= 16 ?
+562 0x0010 // Operand #0x0010 (16)
+563 0x4018 // Wenn x1 < 16 -> Word 1 bereit
+564 0x023B // Operand #0x0000 (0)
+565 0x1800 // Lade wordAddr
+566 0x03B2 // Operand #0x03B2 (946)
+567 0x3440 // wordAddr - 1 -> Word 0
+568 0xFFFF // Operand #0xFFFF (65535)
+569 0x2800 // Speichere Word 0
+570 0x03B2 // Operand #0x03B2 (946)
+571 0x1800 // Lade x1
+572 0x03A3 // Operand #0x03A3 (931)
+573 0x3480 // x1 & 15 (Bit-Index)
+574 0x000F // Operand #0x000F (15)
+575 0x3440 // Addiere Tabellenbasis
+576 0x02D6 // Operand #0x0000 (0)
+577 0x2800 // Speichere Zeiger auf Maske
+578 0x03B4 // Operand #0x03B4 (948)
+579 0x1C00 // Lade Maske via LDAMM
+580 0x03B4 // Operand #0x03B4 (948)
+581 0x2800 // Speichere Maske
+582 0x03B3 // Operand #0x03B3 (947)
+583 0x1C00 // Lade aktuellen Wortwert via LDAMM
+584 0x03B2 // Operand #0x03B2 (946)
+585 0x2800 // Speichere currWord
+586 0x03B5 // Operand #0x03B5 (949)
+587 0x1800 // Lade Color
+588 0x03A7 // Operand #0x03A7 (935)
+589 0x4018 // Wenn Color == 0 -> Clear Pixel
+590 0x025B // Operand #0x0000 (0)
+591 0x1800 // Lade Maske
+592 0x03B3 // Operand #0x03B3 (947)
+593 0x2800 // Patch OR-Operand
+594 0x0256 // Operand #0x0256 (598)
+595 0x1800 // Lade currWord
+596 0x03B5 // Operand #0x03B5 (949)
+597 0x34C0 // currWord | mask
+599 0x2800 // Speichere neues currWord
+600 0x03B5 // Operand #0x03B5 (949)
+601 0x4000 // Sprung zu Write
+602 0x0267 // Operand #0x0000 (0)
+603 0x1800 // Lade Maske
+604 0x03B3 // Operand #0x03B3 (947)
+605 0x3540 // ~mask
+607 0x2800 // Patch AND-Operand
+608 0x0264 // Operand #0x0264 (612)
+609 0x1800 // Lade currWord
+610 0x03B5 // Operand #0x03B5 (949)
+611 0x3480 // currWord & ~mask
+613 0x2800 // Speichere neues currWord
+614 0x03B5 // Operand #0x03B5 (949)
+615 0x1800 // Lade geändertes Wort
+616 0x03B5 // Operand #0x03B5 (949)
+617 0x2C00 // Schreibe Pixelwort in Display via STAMM
+618 0x03B2 // Operand #0x03B2 (946)
+619 0x1800 // Prüfe x1 == x2
+620 0x03A5 // Operand #0x03A5 (933)
+621 0x3540 // ~x2
+623 0x3440 // ~x2 + 1
+624 0x0001 // Operand #0x0001 (1)
+625 0x2800 // Patch x1 Vergleich
+626 0x0276 // Operand #0x0276 (630)
+627 0x1800 // Lade x1
+628 0x03A3 // Operand #0x03A3 (931)
+629 0x3440 // x1 - x2
+631 0x4018 // Wenn x1 == x2 -> Prüfe Y
+632 0x027B // Operand #0x0000 (0)
+633 0x4000 // x1 != x2 -> Mache Schritt
+634 0x0289 // Operand #0x0000 (0)
+635 0x1800 // Prüfe y1 == y2
+636 0x03A6 // Operand #0x03A6 (934)
+637 0x3540 // ~y2
+639 0x3440 // ~y2 + 1
+640 0x0001 // Operand #0x0001 (1)
+641 0x2800 // Patch y1 Vergleich
+642 0x0286 // Operand #0x0286 (646)
+643 0x1800 // Lade y1
+644 0x03A4 // Operand #0x03A4 (932)
+645 0x3440 // y1 - y2
+647 0x4018 // Wenn auch y1 == y2 -> Fertig!
+648 0x02D5 // Operand #0x0000 (0)
+649 0x1800 // Lade err
+650 0x03B0 // Operand #0x03B0 (944)
+651 0x35C0 // err << 1
+653 0x2800 // Speichere e2
+654 0x03B1 // Operand #0x03B1 (945)
+655 0x1800 // Lade dy
+656 0x03AD // Operand #0x03AD (941)
+657 0x3540 // ~dy
+659 0x3440 // ~dy + 1
+660 0x0001 // Operand #0x0001 (1)
+661 0x2800 // Patch dy Subtraktion
+662 0x029A // Operand #0x029A (666)
+663 0x1800 // Lade e2
+664 0x03B1 // Operand #0x03B1 (945)
+665 0x3440 // e2 - dy
+667 0x4010 // Wenn e2 < dy -> Skip X-Step
+668 0x02B1 // Operand #0x0000 (0)
+669 0x1800 // Lade dy
+670 0x03AD // Operand #0x03AD (941)
+671 0x2800 // Patch dy Addition
+672 0x02A4 // Operand #0x02A4 (676)
+673 0x1800 // Lade err
+674 0x03B0 // Operand #0x03B0 (944)
+675 0x3440 // err + dy
+677 0x2800 // Aktualisiere err
+678 0x03B0 // Operand #0x03B0 (944)
+679 0x1800 // Lade sx
+680 0x03AE // Operand #0x03AE (942)
+681 0x2800 // Patch sx Addition
+682 0x02AE // Operand #0x02AE (686)
+683 0x1800 // Lade x1
+684 0x03A3 // Operand #0x03A3 (931)
+685 0x3440 // x1 + sx
+687 0x2800 // Aktualisiere x1
+688 0x03A3 // Operand #0x03A3 (931)
+689 0x1800 // Lade e2
+690 0x03B1 // Operand #0x03B1 (945)
+691 0x3540 // ~e2
+693 0x3440 // ~e2 + 1
+694 0x0001 // Operand #0x0001 (1)
+695 0x2800 // Patch e2 Subtraktion
+696 0x02BC // Operand #0x02BC (700)
+697 0x1800 // Lade dx
+698 0x03AC // Operand #0x03AC (940)
+699 0x3440 // dx - e2
+701 0x4010 // Wenn e2 > dx -> Skip Y-Step
+702 0x02D3 // Operand #0x0000 (0)
+703 0x1800 // Lade dx
+704 0x03AC // Operand #0x03AC (940)
+705 0x2800 // Patch dx Addition
+706 0x02C6 // Operand #0x02C6 (710)
+707 0x1800 // Lade err
+708 0x03B0 // Operand #0x03B0 (944)
+709 0x3440 // err + dx
+711 0x2800 // Aktualisiere err
+712 0x03B0 // Operand #0x03B0 (944)
+713 0x1800 // Lade sy
+714 0x03AF // Operand #0x03AF (943)
+715 0x2800 // Patch sy Addition
+716 0x02D0 // Operand #0x02D0 (720)
+717 0x1800 // Lade y1
+718 0x03A4 // Operand #0x03A4 (932)
+719 0x3440 // y1 + sy
+721 0x2800 // Aktualisiere y1
+722 0x03A4 // Operand #0x03A4 (932)
+723 0x4000 // Loop __line
+724 0x0227 // Operand #0x0227 (551)
+725 0x6000 // RETURN __line
+726 0x8000 // Maske fuer Bit 15
+727 0x4000 // Maske fuer Bit 14
+728 0x2000 // Maske fuer Bit 13
+729 0x1000 // Maske fuer Bit 12
+730 0x0800 // Maske fuer Bit 11
+731 0x0400 // Maske fuer Bit 10
+732 0x0200 // Maske fuer Bit 9
+733 0x0100 // Maske fuer Bit 8
+734 0x0080 // Maske fuer Bit 7
+735 0x0040 // Maske fuer Bit 6
+736 0x0020 // Maske fuer Bit 5
+737 0x0010 // Maske fuer Bit 4
+738 0x0008 // Maske fuer Bit 3
+739 0x0004 // Maske fuer Bit 2
+740 0x0002 // Maske fuer Bit 1
+741 0x0001 // Maske fuer Bit 0
+
+RUN

@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -848,3 +849,71 @@ func TestCodeGen_FloatF16(t *testing.T) {
 		})
 	}
 }
+
+func TestCodeGen_ExampleTasks(t *testing.T) {
+	t.Run("Task1_F16_Heron_Relay", func(t *testing.T) {
+		srcBytes, err := os.ReadFile("../../examples/f16_heron_relay.bas")
+		if err != nil {
+			t.Fatalf("ReadFile error: %v", err)
+		}
+		l := lexer.NewLexer(string(srcBytes))
+		prog, err := parser.NewParser(l.Tokenize()).ParseProgram()
+		if err != nil {
+			t.Fatalf("Parse error: %v", err)
+		}
+		gen := NewCodeGenerator()
+		mem, _, err := gen.Generate(prog)
+		if err != nil {
+			t.Fatalf("Codegen error: %v", err)
+		}
+
+		// Bei 14.3 Hz: max 5 Min = 300s (ca. 1138 Instruktionen -> ca. 319s bzw. bei 2 Schritten ~215s)
+		_, finalMem, err := runRelayEmulator(mem, 1500)
+		if err != nil {
+			t.Fatalf("Emulator error (exceeded 5-min real-hardware instruction budget): %v", err)
+		}
+
+		xAddr := gen.symbols["X#"]
+		expectedF16 := Float64ToF16(1.4140625) // 0x3F6A
+		if finalMem[xAddr] != expectedF16 {
+			t.Errorf("Expected X# = 0x%04X (1.4140625), got 0x%04X (%v)", expectedF16, finalMem[xAddr], F16ToFloat64(finalMem[xAddr]))
+		}
+		if finalMem[2] != 0x006A {
+			t.Errorf("Expected Port 2 (addr 2) = 0x006A (106), got 0x%04X", finalMem[2])
+		}
+	})
+
+	t.Run("Task2_Q88_Harmonograph_Sim", func(t *testing.T) {
+		srcBytes, err := os.ReadFile("../../examples/q88_harmonograph_sim.bas")
+		if err != nil {
+			t.Fatalf("ReadFile error: %v", err)
+		}
+		l := lexer.NewLexer(string(srcBytes))
+		prog, err := parser.NewParser(l.Tokenize()).ParseProgram()
+		if err != nil {
+			t.Fatalf("Parse error: %v", err)
+		}
+		gen := NewCodeGenerator()
+		mem, _, err := gen.Generate(prog)
+		if err != nil {
+			t.Fatalf("Codegen error: %v", err)
+		}
+
+		_, finalMem, err := runRelayEmulator(mem, 100000)
+		if err != nil {
+			t.Fatalf("Emulator error: %v", err)
+		}
+
+		// Prüfe, dass auf der 32x32 LED-Matrix (960..1023) die Lissajous-Trajektorie gezeichnet wurde
+		litWords := 0
+		for addr := 960; addr < 1024; addr++ {
+			if finalMem[addr] != 0 {
+				litWords++
+			}
+		}
+		if litWords < 40 {
+			t.Errorf("Expected rich Lissajous pattern on display (>= 40 words non-zero), got %d", litWords)
+		}
+	})
+}
+
