@@ -195,33 +195,16 @@ def draw_dynamic_overlays(
     # Subtle laser line from Muppet presenter hand toward the active pointer when pointing
     pip_hand_origin = (PIP_X + 35, PIP_Y + 135)
     beam_overlay = out.copy()
-    cv2.line(beam_overlay, pip_hand_origin, (px, py), (40, 90, 255), 2, cv2.LINE_AA)
+    cv2.line(beam_overlay, pip_hand_origin, (px, py), (40, 90, 255), 1, cv2.LINE_AA)
     out = cv2.addWeighted(beam_overlay, 0.22, out, 0.78, 0)
 
-    # Laser pointer outer pulsing halo
-    halo_r = int(18 + 6 * pulse + 8 * amp)
+    # Fine, translucent laser pointer tip so underlying slide text remains 100% legible
+    halo_r = int(5 + 2 * pulse + 2 * amp)
     halo_overlay = out.copy()
-    cv2.circle(halo_overlay, (px, py), halo_r, (30, 80, 255), -1, cv2.LINE_AA)
-    cv2.circle(halo_overlay, (px, py), int(halo_r * 0.6), (20, 180, 255), -1, cv2.LINE_AA)
-    out = cv2.addWeighted(halo_overlay, 0.38, out, 0.62, 0)
-
-    # Crisp laser core & outer ring
-    cv2.circle(out, (px, py), halo_r, (30, 140, 255), 2, cv2.LINE_AA)
-    cv2.circle(out, (px, py), 7, (60, 210, 255), -1, cv2.LINE_AA)
-    cv2.circle(out, (px, py), 3, (255, 255, 255), -1, cv2.LINE_AA)
-
-    # Floating pointer callout tag next to laser dot
-    tag_w = len(label) * 9 + 24
-    tag_x = min(px + 20, 1480 - tag_w)
-    tag_y = max(210, py - 28)
-    tag_overlay = out.copy()
-    cv2.rectangle(tag_overlay, (tag_x, tag_y), (tag_x + tag_w, tag_y + 26), (16, 24, 42), -1)
-    cv2.rectangle(tag_overlay, (tag_x, tag_y), (tag_x + tag_w, tag_y + 26), glow_color, 1, cv2.LINE_AA)
-    out = cv2.addWeighted(tag_overlay, 0.85, out, 0.15, 0)
-    cv2.putText(
-        out, label, (tag_x + 10, tag_y + 18),
-        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (240, 250, 255), 1, cv2.LINE_AA
-    )
+    cv2.circle(halo_overlay, (px, py), halo_r, (30, 110, 255), -1, cv2.LINE_AA)
+    cv2.circle(halo_overlay, (px, py), 3, (80, 220, 255), -1, cv2.LINE_AA)
+    cv2.circle(halo_overlay, (px, py), 1, (255, 255, 255), -1, cv2.LINE_AA)
+    out = cv2.addWeighted(halo_overlay, 0.45, out, 0.55, 0)
 
     # 3. Live 16-Bit Relay Telemetry HUD in Top-Right Header (x: 1180..1840, y: 28..172)
     hud_x, hud_y, hud_w, hud_h = 1220, 32, 620, 138
