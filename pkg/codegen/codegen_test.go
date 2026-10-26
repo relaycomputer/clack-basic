@@ -709,3 +709,142 @@ func TestCodeGen_FixedQ88(t *testing.T) {
 		})
 	}
 }
+
+func TestCodeGen_FloatF16(t *testing.T) {
+	// 1. Prüfe CLACK-F16 Bitkodierung (S1-E7-M8, Bias 63, implizite 1)
+	encodingCases := []struct {
+		val  float64
+		word uint16
+	}{
+		{0.0, 0x0000},
+		{1.0, 0x3F00},
+		{-1.0, 0xBF00},
+		{1.5, 0x3F80},
+		{2.0, 0x4000},
+		{2.25, 0x4020},
+		{3.0, 0x4080},
+		{3.75, 0x40E0},
+		{0.5, 0x3E00},
+		{0.25, 0x3D00},
+		{-0.75, 0xBE80},
+		{10.0, 0x4240},
+	}
+	for _, ec := range encodingCases {
+		got := Float64ToF16(ec.val)
+		if got != ec.word {
+			t.Errorf("Float64ToF16(%v) = 0x%04X, expected 0x%04X", ec.val, got, ec.word)
+		}
+		back := F16ToFloat64(got)
+		if back != ec.val {
+			t.Errorf("F16ToFloat64(0x%04X) = %v, expected %v", got, back, ec.val)
+		}
+	}
+
+	// 2. Prüfe Laufzeitroutinen (__f16_add, __f16_sub, __f16_mul, __f16_div, __f16_itof, __f16_ftoi) im Relais-Emulator
+	testCases := []struct {
+		name         string
+		source       string
+		expected     uint16
+		needRoutines []string
+	}{
+		{
+			name:         "F16 Addition (__f16_add) 1.5 + 2.25 = 3.75 (0x40E0)",
+			source:       "10 A# = 1.5\n20 B# = 2.25\n30 R# = A# + B#\n40 END",
+			expected:     Float64ToF16(3.75),
+			needRoutines: []string{"__f16_add"},
+		},
+		{
+			name:         "F16 Subtraction (__f16_sub) 1.5 - 2.25 = -0.75 (0xBE80)",
+			source:       "10 A# = 1.5\n20 B# = 2.25\n30 R# = A# - B#\n40 END",
+			expected:     Float64ToF16(-0.75),
+			needRoutines: []string{"__f16_sub", "__f16_add"},
+		},
+		{
+			name:         "F16 Multiplication (__f16_mul) 1.5 * 2.25 = 3.375 (0x40B0)",
+			source:       "10 A# = 1.5\n20 B# = 2.25\n30 R# = A# * B#\n40 END",
+			expected:     Float64ToF16(3.375),
+			needRoutines: []string{"__f16_mul"},
+		},
+		{
+			name:         "F16 Division (__f16_div) 1.5 / 3.0 = 0.5 (0x3E00)",
+			source:       "10 A# = 1.5\n20 B# = 3.0\n30 R# = A# / B#\n40 END",
+			expected:     Float64ToF16(0.5),
+			needRoutines: []string{"__f16_div"},
+		},
+		{
+			name: "DIM AS FLOAT16, Mixed Int Expression and FTOI",
+			source: `10 DIM X, Y, Z AS FLOAT16
+20 A = 4
+30 X = 1.5
+40 Y = 2.25
+50 Z = (X * Y) + A
+60 R = FTOI(Z)
+70 END`,
+			expected:     7, // 1.5 * 2.25 + 4 = 3.375 + 4 = 7.375 -> 7
+			needRoutines: []string{"__f16_mul", "__f16_add", "__f16_itof", "__f16_ftoi"},
+		},
+		{
+			name: "Explicit F16 Functions (F16ADD, F16SUB, F16MUL, F16DIV, F16TOI)",
+			source: `10 A# = 10.0
+20 B# = 2.5
+30 C# = F16ADD(A#, B#)
+40 D# = F16SUB(C#, 0.5)
+50 E# = F16DIV(D#, 3.0)
+60 F# = F16MUL(E#, 2.5)
+70 R = F16TOI(F#)
+80 END`,
+			expected:     10, // ((10 + 2.5 - 0.5) / 3.0) * 2.5 = (12 / 3) * 2.5 = 10.0 -> 10
+			needRoutines: []string{"__f16_add", "__f16_sub", "__f16_mul", "__f16_div", "__f16_ftoi"},
+		},
+		{
+			name: "F16 Comparisons and IF Branching",
+			source: `10 X# = -1.5
+20 Y# = 2.0
+30 R = 0
+40 IF X# < Y# THEN R = R + 10
+50 IF Y# > 1.0 THEN R = R + 20
+60 IF ABS(X#) = 1.5 THEN R = R + 5
+70 END`,
+			expected:     35,
+			needRoutines: []string{"__f16_sub", "__f16_add"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.NewLexer(tc.source)
+			tokens := l.Tokenize()
+			p := parser.NewParser(tokens)
+			prog, err := p.ParseProgram()
+			if err != nil {
+				t.Fatalf("Parser error for '%s': %v", tc.source, err)
+			}
+			gen := NewCodeGenerator()
+			mem, _, err := gen.Generate(prog)
+			if err != nil {
+				t.Fatalf("Codegen error: %v", err)
+			}
+			for _, routine := range tc.needRoutines {
+				if _, ok := gen.labels[routine]; !ok {
+					t.Errorf("Expected runtime label %s in generated code", routine)
+				}
+			}
+			finalAcc, finalMem, err := runRelayEmulator(mem, 80000)
+			if err != nil {
+				t.Fatalf("Emulator execution error: %v", err)
+			}
+			rAddr, ok := gen.symbols["R"]
+			if !ok {
+				rAddr, ok = gen.symbols["R#"]
+			}
+			if !ok {
+				t.Fatalf("Result variable R / R# not found in symbol table")
+			}
+			actual := finalMem[rAddr]
+			if actual != tc.expected {
+				t.Errorf("Test '%s': expected 0x%04X (%d), got 0x%04X (%d) (final acc: 0x%04X)",
+					tc.name, tc.expected, tc.expected, actual, actual, finalAcc)
+			}
+		})
+	}
+}

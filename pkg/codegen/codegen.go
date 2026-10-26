@@ -53,6 +53,12 @@ type CodeGenerator struct {
 	needFMulQ88 bool
 	needFDivQ88 bool
 	needFtoiQ88 bool
+	needFAddF16 bool
+	needFSubF16 bool
+	needFMulF16 bool
+	needFDivF16 bool
+	needItofF16 bool
+	needFtoiF16 bool
 	needCls     bool
 	needPset    bool
 	needLine    bool
@@ -208,22 +214,31 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 		upper := strings.ToUpper(s.VarName)
 		valType := g.exprType(s.Value)
 		if !g.explicitVarTypes[upper] {
-			if strings.HasSuffix(upper, "#") || valType == ast.TypeFixed8 {
+			if strings.HasSuffix(upper, "#") || valType == ast.TypeFloat16 {
+				g.varTypes[upper] = ast.TypeFloat16
+			} else if valType == ast.TypeFixed8 {
 				g.varTypes[upper] = ast.TypeFixed8
 			}
 		}
 		targetType := g.getVarType(s.VarName)
 		varAddr := g.getOrCreateVar(s.VarName)
 
-		if targetType == ast.TypeFixed8 {
+		switch targetType {
+		case ast.TypeFloat16:
+			if err := g.compileExprAsFloat16(s.Value); err != nil {
+				return err
+			}
+		case ast.TypeFixed8:
 			if err := g.compileExprAsFixed8(s.Value); err != nil {
 				return err
 			}
-		} else {
+		default:
 			if err := g.compileExpr(s.Value); err != nil {
 				return err
 			}
-			if valType == ast.TypeFixed8 {
+			if valType == ast.TypeFloat16 {
+				g.emitF16ToInt()
+			} else if valType == ast.TypeFixed8 {
 				g.emitQ88ToInt()
 			}
 		}
@@ -671,6 +686,22 @@ func (g *CodeGenerator) emitComparisonDiff(e *ast.BinaryExpr) (branchOp uint16, 
 		return 0, false, false, nil
 	}
 
+	isFloat16Comp := g.exprType(e.Left) == ast.TypeFloat16 || g.exprType(e.Right) == ast.TypeFloat16
+	if isFloat16Comp {
+		g.needFSubF16 = true
+		g.needFAddF16 = true
+		if !reverse {
+			if err := g.emitF16BinaryCall(e.Left, e.Right, false, "__f16_sub"); err != nil {
+				return 0, false, true, err
+			}
+		} else {
+			if err := g.emitF16BinaryCall(e.Right, e.Left, false, "__f16_sub"); err != nil {
+				return 0, false, true, err
+			}
+		}
+		return branchOp, trueOnBranch, true, nil
+	}
+
 	isFixedComp := g.exprType(e.Left) == ast.TypeFixed8 || g.exprType(e.Right) == ast.TypeFixed8
 	if isFixedComp {
 		if rVal, ok := evalConstFixed8Expr(e.Right); ok {
@@ -837,8 +868,85 @@ func (g *CodeGenerator) emitComparisonDiff(e *ast.BinaryExpr) (branchOp uint16, 
 
 func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
 	upper := strings.ToUpper(s.VarName)
-	if !g.explicitVarTypes[upper] && (strings.HasSuffix(upper, "#") || g.exprType(s.Start) == ast.TypeFixed8 || g.exprType(s.End) == ast.TypeFixed8 || (s.Step != nil && g.exprType(s.Step) == ast.TypeFixed8)) {
-		g.varTypes[upper] = ast.TypeFixed8
+	if !g.explicitVarTypes[upper] {
+		if strings.HasSuffix(upper, "#") || g.exprType(s.Start) == ast.TypeFloat16 || g.exprType(s.End) == ast.TypeFloat16 || (s.Step != nil && g.exprType(s.Step) == ast.TypeFloat16) {
+			g.varTypes[upper] = ast.TypeFloat16
+		} else if g.exprType(s.Start) == ast.TypeFixed8 || g.exprType(s.End) == ast.TypeFixed8 || (s.Step != nil && g.exprType(s.Step) == ast.TypeFixed8) {
+			g.varTypes[upper] = ast.TypeFixed8
+		}
+	}
+	if g.getVarType(s.VarName) == ast.TypeFloat16 {
+		varAddr := g.getOrCreateVar(s.VarName)
+		if err := g.compileExprAsFloat16(s.Start); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, varAddr, fmt.Sprintf("FOR %s Startwert (F16)", s.VarName))
+
+		endAddr := g.getOrCreateVar(fmt.Sprintf("__for_limit_%s", s.VarName))
+		if err := g.compileExprAsFloat16(s.End); err != nil {
+			return err
+		}
+		g.emit(OpSTAM, endAddr, fmt.Sprintf("FOR %s Endwert (F16)", s.VarName))
+
+		stepAddr := g.getOrCreateVar(fmt.Sprintf("__for_step_%s", s.VarName))
+		stepNeg := false
+		if s.Step != nil {
+			if cStep, ok := evalConstFloat16Expr(s.Step); ok {
+				stepNeg = (cStep & 0x8000) != 0
+				g.emit(OpLDA, cStep, "FOR Step (F16)")
+			} else {
+				if err := g.compileExprAsFloat16(s.Step); err != nil {
+					return err
+				}
+			}
+		} else {
+			g.emit(OpLDA, F16One, "FOR Default Step 1.0 (F16)")
+		}
+		g.emit(OpSTAM, stepAddr, fmt.Sprintf("FOR %s Schrittweite (F16)", s.VarName))
+
+		loopStartPC := g.pc
+		loopStartLabel := fmt.Sprintf("__for_start_%s_%d", s.VarName, loopStartPC)
+		loopEndLabel := fmt.Sprintf("__for_end_%s_%d", s.VarName, loopStartPC)
+		g.labels[loopStartLabel] = loopStartPC
+
+		g.needFSubF16 = true
+		g.needFAddF16 = true
+		r0Addr := g.getOrCreateVar("__r0")
+		r1Addr := g.getOrCreateVar("__r1")
+		if !stepNeg {
+			g.emit(OpLDAM, endAddr, "FOR F16 Lade End")
+			g.emit(OpSTAM, r0Addr, "__r0 = End")
+			g.emit(OpLDAM, varAddr, "FOR F16 Lade Var")
+			g.emit(OpSTAM, r1Addr, "__r1 = Var")
+		} else {
+			g.emit(OpLDAM, varAddr, "FOR F16 Lade Var")
+			g.emit(OpSTAM, r0Addr, "__r0 = Var")
+			g.emit(OpLDAM, endAddr, "FOR F16 Lade End")
+			g.emit(OpSTAM, r1Addr, "__r1 = End")
+		}
+		g.emit(OpCALL, 0, "CALL __f16_sub (FOR Limit-Check)")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__f16_sub"})
+		g.emit(OpBN, 0, "FOR F16 Beenden")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopEndLabel})
+
+		for _, bStmt := range s.Body {
+			if err := g.compileStmt(bStmt); err != nil {
+				return err
+			}
+		}
+
+		g.emit(OpLDAM, varAddr, "FOR F16 Lade Var")
+		g.emit(OpSTAM, r0Addr, "__r0 = Var")
+		g.emit(OpLDAM, stepAddr, "FOR F16 Lade Step")
+		g.emit(OpSTAM, r1Addr, "__r1 = Step")
+		g.emit(OpCALL, 0, "CALL __f16_add (FOR Step)")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__f16_add"})
+		g.emit(OpSTAM, varAddr, "FOR F16 Speichere Var")
+
+		g.emit(OpBA, 0, "FOR Loop Sprung")
+		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: loopStartLabel})
+		g.labels[loopEndLabel] = g.pc
+		return nil
 	}
 	isFixedLoop := g.getVarType(s.VarName) == ast.TypeFixed8
 	varAddr := g.getOrCreateVar(s.VarName)
@@ -1065,6 +1173,10 @@ func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
 			return err
 		}
 		if e.Op == "-" {
+			if g.exprType(e.Right) == ast.TypeFloat16 {
+				g.emitF16Neg()
+				return nil
+			}
 			// Negation: ~Accu + 1
 			g.emit(OpNOT, 0, "Negation: NOT")
 			g.emit(OpADD, 1, "Negation: + 1")
@@ -1120,6 +1232,14 @@ func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
 
 func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 	op := strings.ToUpper(e.Op)
+
+	// Wenn einer der Operanden vom Typ FLOAT16 (CLACK-F16) ist, nutze CLACK-F16 Gleitkomma-Arithmetik
+	if g.exprType(e.Left) == ast.TypeFloat16 || g.exprType(e.Right) == ast.TypeFloat16 {
+		switch op {
+		case "+", "-", "*", "/", "=", "==", "<>", "!=", "<", "<=", ">", ">=":
+			return g.compileBinaryFloat16(e)
+		}
+	}
 
 	// Wenn einer der Operanden vom Typ FIXED8 (Q8.8) ist, nutze Q8.8 Festkomma-Arithmetik
 	if g.exprType(e.Left) == ast.TypeFixed8 || g.exprType(e.Right) == ast.TypeFixed8 {
@@ -1904,6 +2024,9 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 
 	// 2c. Q8.8 Festkomma-Laufzeitroutinen (__runtime_fmul_q88, __runtime_fdiv_q88, __runtime_ftoi_q88)
 	g.emitFixedQ88Routines()
+
+	// 2d. CLACK-F16 Gleitkomma-Laufzeitroutinen (__f16_add, __f16_sub, __f16_mul, __f16_div, __f16_itof, __f16_ftoi)
+	g.emitFloatF16Routines()
 
 	// 3. Display Löschen __cls (von __cls_ptr bis __cls_end_addr)
 	if g.needCls {

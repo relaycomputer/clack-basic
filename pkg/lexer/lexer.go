@@ -242,6 +242,7 @@ func (l *Lexer) readNumber() Token {
 			Line:   tokLine,
 			Column: tokCol,
 			Value:  int(val),
+			IsHex:  true,
 		}
 	}
 
@@ -260,6 +261,7 @@ func (l *Lexer) readNumber() Token {
 			Line:   tokLine,
 			Column: tokCol,
 			Value:  int(val),
+			IsHex:  true,
 		}
 	}
 
@@ -277,6 +279,7 @@ func (l *Lexer) readNumber() Token {
 			Line:   tokLine,
 			Column: tokCol,
 			Value:  int(val),
+			IsHex:  true,
 		}
 	}
 

@@ -93,6 +93,7 @@ type Token struct {
 	Column   int
 	Value    int     // Für Zahlen (bei Festkomma bereits Q8.8-skaliert)
 	IsFloat  bool    // True wenn Dezimalpunkt im Zahlenliteral (z.B. 1.5)
+	IsHex    bool    // True wenn Hex-/Binärliteral (0x..., &H..., 0b...)
 	FloatVal float64 // Ursprünglicher Gleitkommawert bei Dezimalliteralen
 }
 

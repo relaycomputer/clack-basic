@@ -136,14 +136,14 @@ func Q88Div(a, b uint16) uint16 {
 // TYPPRÜFUNG & KONVERTIERUNG IM COMPILER
 // ============================================================================
 
-// getVarType ermittelt den Datentyp einer Variable (TypeInt16 oder TypeFixed8).
+// getVarType ermittelt den Datentyp einer Variable (TypeInt16, TypeFixed8 oder TypeFloat16).
 func (g *CodeGenerator) getVarType(name string) ast.DataType {
 	upper := strings.ToUpper(name)
 	if t, exists := g.varTypes[upper]; exists {
 		return t
 	}
 	if strings.HasSuffix(upper, "#") {
-		return ast.TypeFixed8
+		return ast.TypeFloat16
 	}
 	return ast.TypeInt16
 }
@@ -167,7 +167,12 @@ func (g *CodeGenerator) exprType(expr ast.Expr) ast.DataType {
 		op := strings.ToUpper(e.Op)
 		switch op {
 		case "+", "-", "*", "/":
-			if g.exprType(e.Left) == ast.TypeFixed8 || g.exprType(e.Right) == ast.TypeFixed8 {
+			lType := g.exprType(e.Left)
+			rType := g.exprType(e.Right)
+			if lType == ast.TypeFloat16 || rType == ast.TypeFloat16 {
+				return ast.TypeFloat16
+			}
+			if lType == ast.TypeFixed8 || rType == ast.TypeFixed8 {
 				return ast.TypeFixed8
 			}
 			return ast.TypeInt16
@@ -179,8 +184,24 @@ func (g *CodeGenerator) exprType(expr ast.Expr) ast.DataType {
 		}
 	case *ast.FixedFuncExpr:
 		switch strings.ToUpper(e.Name) {
-		case "FTOI", "INT", "FIX":
+		case "FTOI", "F16TOI", "INT", "FIX", "FCMP", "F16CMP":
 			return ast.TypeInt16
+		case "F16ADD", "F16SUB", "F16MUL", "F16DIV", "ITOF16", "FLOAT16", "F16", "F16ABS", "F16NEG":
+			return ast.TypeFloat16
+		case "FIXED8":
+			return ast.TypeFixed8
+		case "FADD", "FSUB", "FMUL", "FDIV":
+			for _, arg := range e.Args {
+				if g.exprType(arg) == ast.TypeFloat16 {
+					return ast.TypeFloat16
+				}
+			}
+			return ast.TypeFixed8
+		case "ITOF", "FABS", "FNEG":
+			if len(e.Args) > 0 && g.exprType(e.Args[0]) == ast.TypeFloat16 {
+				return ast.TypeFloat16
+			}
+			return ast.TypeFixed8
 		case "ABS":
 			if len(e.Args) > 0 {
 				return g.exprType(e.Args[0])
@@ -251,11 +272,29 @@ func (g *CodeGenerator) emitQ88ToInt() {
 	g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_ftoi_q88"})
 }
 
-// compileFixedFunc übersetzt explizite Festkomma- und Konvertierungsfunktionen:
-// FADD, FSUB, FMUL, FDIV, ITOF, FTOI, FIXED8, INT, FIX, ABS, FABS, FNEG.
+// compileFixedFunc übersetzt explizite Festkomma-, Gleitkomma- und Konvertierungsfunktionen:
+// FADD, FSUB, FMUL, FDIV, FCMP, F16ADD, F16SUB, F16MUL, F16DIV, F16CMP,
+// ITOF, FTOI, ITOF16, F16TOI, FIXED8, FLOAT16, F16, INT, FIX, ABS, FABS, FNEG, F16ABS, F16NEG.
 func (g *CodeGenerator) compileFixedFunc(e *ast.FixedFuncExpr) error {
 	name := strings.ToUpper(e.Name)
 	switch name {
+	case "F16ADD", "F16SUB", "F16MUL", "F16DIV":
+		if len(e.Args) != 2 {
+			return fmt.Errorf("%s erwartet genau 2 Argumente, erhalten: %d", name, len(e.Args))
+		}
+		var op string
+		switch name {
+		case "F16ADD":
+			op = "+"
+		case "F16SUB":
+			op = "-"
+		case "F16MUL":
+			op = "*"
+		case "F16DIV":
+			op = "/"
+		}
+		return g.compileBinaryFloat16WithArgMode(e.Args[0], op, e.Args[1], true)
+
 	case "FADD", "FSUB", "FMUL", "FDIV":
 		if len(e.Args) != 2 {
 			return fmt.Errorf("%s erwartet genau 2 Argumente, erhalten: %d", name, len(e.Args))
@@ -271,13 +310,36 @@ func (g *CodeGenerator) compileFixedFunc(e *ast.FixedFuncExpr) error {
 		case "FDIV":
 			op = "/"
 		}
+		if g.exprType(e.Args[0]) == ast.TypeFloat16 || g.exprType(e.Args[1]) == ast.TypeFloat16 {
+			return g.compileBinaryFloat16WithArgMode(e.Args[0], op, e.Args[1], true)
+		}
 		return g.compileBinaryFixed8WithArgMode(e.Args[0], op, e.Args[1], true)
+
+	case "F16CMP", "FCMP":
+		if len(e.Args) != 2 {
+			return fmt.Errorf("%s erwartet genau 2 Argumente, erhalten: %d", name, len(e.Args))
+		}
+		if name == "F16CMP" || g.exprType(e.Args[0]) == ast.TypeFloat16 || g.exprType(e.Args[1]) == ast.TypeFloat16 {
+			g.needFSubF16 = true
+			g.needFAddF16 = true
+			return g.emitF16BinaryCall(e.Args[0], e.Args[1], true, "__f16_sub")
+		}
+		return g.compileBinaryFixed8WithArgMode(e.Args[0], "-", e.Args[1], true)
+
+	case "ITOF16", "FLOAT16", "F16":
+		if len(e.Args) != 1 {
+			return fmt.Errorf("%s erwartet genau 1 Argument", name)
+		}
+		return g.compileExprAsFloat16(e.Args[0])
 
 	case "ITOF", "FIXED8":
 		if len(e.Args) != 1 {
 			return fmt.Errorf("%s erwartet genau 1 Argument", name)
 		}
 		arg := e.Args[0]
+		if name == "ITOF" && g.exprType(arg) == ast.TypeFloat16 {
+			return g.compileExprAsFloat16(arg)
+		}
 		if val, ok := evalConstFixed8Expr(arg); ok {
 			g.emit(OpLDA, uint16(val&0xFFFF), fmt.Sprintf("%s Konstante %d", name, val))
 			return nil
@@ -291,11 +353,29 @@ func (g *CodeGenerator) compileFixedFunc(e *ast.FixedFuncExpr) error {
 		g.emitIntToQ88()
 		return nil
 
+	case "F16TOI":
+		if len(e.Args) != 1 {
+			return fmt.Errorf("F16TOI erwartet genau 1 Argument")
+		}
+		arg := e.Args[0]
+		if err := g.compileArgForFloat16Op(arg, true); err != nil {
+			return err
+		}
+		g.emitF16ToInt()
+		return nil
+
 	case "FTOI", "INT", "FIX":
 		if len(e.Args) != 1 {
 			return fmt.Errorf("%s erwartet genau 1 Argument", name)
 		}
 		arg := e.Args[0]
+		if g.exprType(arg) == ast.TypeFloat16 {
+			if err := g.compileExpr(arg); err != nil {
+				return err
+			}
+			g.emitF16ToInt()
+			return nil
+		}
 		if val, ok := evalConstFixed8Expr(arg); ok && g.exprType(arg) == ast.TypeFixed8 {
 			intVal := int(Q88ToInt(uint16(val & 0xFFFF)))
 			g.emit(OpLDA, uint16(intVal&0xFFFF), fmt.Sprintf("%s Konstante %d", name, intVal))
@@ -310,9 +390,26 @@ func (g *CodeGenerator) compileFixedFunc(e *ast.FixedFuncExpr) error {
 		}
 		return nil
 
+	case "F16ABS":
+		if len(e.Args) != 1 {
+			return fmt.Errorf("F16ABS erwartet genau 1 Argument")
+		}
+		if err := g.compileArgForFloat16Op(e.Args[0], true); err != nil {
+			return err
+		}
+		g.emit(OpAND, 0x7FFF, "F16ABS: Vorzeichenbit loeschen")
+		return nil
+
 	case "ABS", "FABS":
 		if len(e.Args) != 1 {
 			return fmt.Errorf("%s erwartet genau 1 Argument", name)
+		}
+		if g.exprType(e.Args[0]) == ast.TypeFloat16 {
+			if err := g.compileExpr(e.Args[0]); err != nil {
+				return err
+			}
+			g.emit(OpAND, 0x7FFF, "F16 ABS: Vorzeichenbit loeschen")
+			return nil
 		}
 		if err := g.compileExpr(e.Args[0]); err != nil {
 			return err
@@ -329,9 +426,26 @@ func (g *CodeGenerator) compileFixedFunc(e *ast.FixedFuncExpr) error {
 		g.labels[doneLabel] = g.pc
 		return nil
 
+	case "F16NEG":
+		if len(e.Args) != 1 {
+			return fmt.Errorf("F16NEG erwartet genau 1 Argument")
+		}
+		if err := g.compileArgForFloat16Op(e.Args[0], true); err != nil {
+			return err
+		}
+		g.emitF16Neg()
+		return nil
+
 	case "FNEG":
 		if len(e.Args) != 1 {
 			return fmt.Errorf("FNEG erwartet genau 1 Argument")
+		}
+		if g.exprType(e.Args[0]) == ast.TypeFloat16 {
+			if err := g.compileExprAsFloat16(e.Args[0]); err != nil {
+				return err
+			}
+			g.emitF16Neg()
+			return nil
 		}
 		if err := g.compileExprAsFixed8(e.Args[0]); err != nil {
 			return err

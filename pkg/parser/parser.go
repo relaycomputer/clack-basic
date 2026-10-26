@@ -734,10 +734,20 @@ func (p *Parser) parseDimStatement() ast.Stmt {
 			p.nextToken()
 			typeName = "Q8.8"
 		}
+		// Optional: CLACK-F16 (wird als IDENT "CLACK" gefolgt von "-" und "F16" geschrieben)
+		if typeName == "CLACK" && p.curTok.Type == lexer.TOKEN_MINUS {
+			p.nextToken() // '-'
+			if p.curTok.Type == lexer.TOKEN_IDENT {
+				p.nextToken()
+			}
+			typeName = "CLACK-F16"
+		}
 
 		switch typeName {
 		case "FIXED8", "FIXED", "Q8.8", "Q88":
 			varType = ast.TypeFixed8
+		case "FLOAT16", "FLOAT", "F16", "CLACK-F16", "CLACK_F16", "CLACKF16", "ZUSE16", "ZUSE", "SINGLE":
+			varType = ast.TypeFloat16
 		case "INTEGER", "INTEGER16", "INT16", "INT":
 			varType = ast.TypeInt16
 		default:
@@ -782,6 +792,7 @@ func (p *Parser) parsePrefix() ast.Expr {
 		return &ast.NumberLiteral{
 			Value:    tok.Value,
 			IsFixed:  tok.IsFloat,
+			IsHex:    tok.IsHex,
 			FloatVal: tok.FloatVal,
 			Line:     line,
 		}
@@ -909,7 +920,11 @@ func (p *Parser) curPrecedence() int {
 
 func isFixedBuiltinFunc(name string) bool {
 	switch name {
-	case "FADD", "FSUB", "FMUL", "FDIV", "ITOF", "FTOI", "FIXED8", "INT", "FIX", "ABS", "FABS", "FNEG":
+	case "FADD", "FSUB", "FMUL", "FDIV", "FCMP",
+		"F16ADD", "F16SUB", "F16MUL", "F16DIV", "F16CMP",
+		"ITOF", "FTOI", "ITOF16", "F16TOI",
+		"FIXED8", "FLOAT16", "F16",
+		"INT", "FIX", "ABS", "FABS", "FNEG", "F16ABS", "F16NEG":
 		return true
 	default:
 		return false

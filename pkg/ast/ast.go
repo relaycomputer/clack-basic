@@ -43,14 +43,16 @@ func (p *Program) Pos() int { return 1 }
 type DataType int
 
 const (
-	TypeInt16  DataType = iota // Standard 16-Bit Signed Integer
-	TypeFixed8                 // Q8.8 Signed Fixed-Point (8 Ganzzahl-, 8 Bruchbits)
+	TypeInt16   DataType = iota // Standard 16-Bit Signed Integer
+	TypeFixed8                  // Q8.8 Signed Fixed-Point (8 Ganzzahl-, 8 Bruchbits)
+	TypeFloat16                 // CLACK-F16 Zuse-Style Float (1 Bit Sign, 7 Bit Exp Bias 63, 8 Bit Mantisse mit impliziter 1)
 )
 
-// NumberLiteral: 16-Bit Zahlenkonstante (z.B. 100, 0x1400 oder Q8.8 Kommazahl 1.5)
+// NumberLiteral: 16-Bit Zahlenkonstante (z.B. 100, 0x1400 oder Kommazahl 1.5)
 type NumberLiteral struct {
 	Value    int
 	IsFixed  bool
+	IsHex    bool
 	FloatVal float64
 	Line     int
 }
