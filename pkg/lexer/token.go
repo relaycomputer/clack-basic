@@ -46,6 +46,8 @@ const (
 	TOKEN_PIXELMOVE // PIXELMOVE X, Y TO/BY ...
 	TOKEN_BY        // BY (relative Verschiebung)
 	TOKEN_PRINT     // PRINT "Wert=", X
+	TOKEN_DIM       // DIM X AS FIXED8
+	TOKEN_AS        // AS (Typdeklaration)
 	TOKEN_END       // END / STOP
 	TOKEN_HALT    // HALT
 
@@ -85,11 +87,13 @@ const (
 
 // Token speichert den Typ, Textwert und die Zeilennummer im Quellcode.
 type Token struct {
-	Type   TokenType
-	Lexeme string
-	Line   int
-	Column int
-	Value  int // Für Zahlen
+	Type     TokenType
+	Lexeme   string
+	Line     int
+	Column   int
+	Value    int     // Für Zahlen (bei Festkomma bereits Q8.8-skaliert)
+	IsFloat  bool    // True wenn Dezimalpunkt im Zahlenliteral (z.B. 1.5)
+	FloatVal float64 // Ursprünglicher Gleitkommawert bei Dezimalliteralen
 }
 
 func (t Token) String() string {

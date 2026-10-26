@@ -30,27 +30,32 @@ const (
 
 // CodeGenerator übersetzt AST in Maschinencode.
 type CodeGenerator struct {
-	memory       [MaxMemorySize]uint16
-	pc           uint16
-	symbols      map[string]uint16 // Variablenname -> RAM-Adresse
-	nextVarAddr  uint16
-	nextTempAddr uint16
+	memory           [MaxMemorySize]uint16
+	pc               uint16
+	symbols          map[string]uint16       // Variablenname -> RAM-Adresse
+	varTypes         map[string]ast.DataType // Variablenname -> Datentyp (INT16 / FIXED8)
+	explicitVarTypes map[string]bool         // Wurde Variable explizit via DIM typisiert?
+	nextVarAddr      uint16
+	nextTempAddr     uint16
 
 	displayBase  uint16
 	varBaseAddr  uint16
 	tempBaseAddr uint16
 	resolution   int
 
-	labels       map[string]uint16 // Label-Name -> PC-Adresse
-	fixups       []labelFixup      // Unaufgelöste Sprungziele (Forward Jumps)
+	labels map[string]uint16 // Label-Name -> PC-Adresse
+	fixups []labelFixup      // Unaufgelöste Sprungziele (Forward Jumps)
 
 	// Runtime-Bedarf
-	needMul  bool
-	needDiv  bool
-	needSqr  bool
-	needCls  bool
-	needPset bool
-	needLine bool
+	needMul     bool
+	needDiv     bool
+	needSqr     bool
+	needFMulQ88 bool
+	needFDivQ88 bool
+	needFtoiQ88 bool
+	needCls     bool
+	needPset    bool
+	needLine    bool
 
 	// DATA-Tabelle
 	dataTable []int
@@ -76,8 +81,10 @@ type forLoopContext struct {
 // NewCodeGenerator initialisiert den Code-Generator.
 func NewCodeGenerator() *CodeGenerator {
 	return &CodeGenerator{
-		symbols:      make(map[string]uint16),
-		displayBase:  DisplayBase,
+		symbols:          make(map[string]uint16),
+		varTypes:         make(map[string]ast.DataType),
+		explicitVarTypes: make(map[string]bool),
+		displayBase:      DisplayBase,
 		varBaseAddr:  VarBaseAddr,
 		tempBaseAddr: TempBaseAddr,
 		nextVarAddr:  VarBaseAddr,
@@ -188,11 +195,37 @@ func (g *CodeGenerator) compileStmt(stmt ast.Stmt) error {
 		g.labels[s.Name] = g.pc
 		return nil
 
+	case *ast.DimStmt:
+		for _, vName := range s.VarNames {
+			upper := strings.ToUpper(vName)
+			g.varTypes[upper] = s.VarType
+			g.explicitVarTypes[upper] = true
+			g.getOrCreateVar(vName)
+		}
+		return nil
+
 	case *ast.LetStmt:
+		upper := strings.ToUpper(s.VarName)
+		valType := g.exprType(s.Value)
+		if !g.explicitVarTypes[upper] {
+			if strings.HasSuffix(upper, "#") || valType == ast.TypeFixed8 {
+				g.varTypes[upper] = ast.TypeFixed8
+			}
+		}
+		targetType := g.getVarType(s.VarName)
 		varAddr := g.getOrCreateVar(s.VarName)
-		// Wert des Ausdrucks in Accu berechnen
-		if err := g.compileExpr(s.Value); err != nil {
-			return err
+
+		if targetType == ast.TypeFixed8 {
+			if err := g.compileExprAsFixed8(s.Value); err != nil {
+				return err
+			}
+		} else {
+			if err := g.compileExpr(s.Value); err != nil {
+				return err
+			}
+			if valType == ast.TypeFixed8 {
+				g.emitQ88ToInt()
+			}
 		}
 		// Accu in Variable speichern
 		g.emit(OpSTAM, varAddr, fmt.Sprintf("LET %s = Accu", s.VarName))
@@ -638,6 +671,69 @@ func (g *CodeGenerator) emitComparisonDiff(e *ast.BinaryExpr) (branchOp uint16, 
 		return 0, false, false, nil
 	}
 
+	isFixedComp := g.exprType(e.Left) == ast.TypeFixed8 || g.exprType(e.Right) == ast.TypeFixed8
+	if isFixedComp {
+		if rVal, ok := evalConstFixed8Expr(e.Right); ok {
+			if err := g.compileExprAsFixed8(e.Left); err != nil {
+				return 0, false, true, err
+			}
+			if !reverse {
+				if (rVal & 0xFFFF) != 0 {
+					g.emit(OpADD, uint16((-rVal)&0xFFFF), fmt.Sprintf("Q8.8 Vergleich Accu - %d", rVal))
+				}
+			} else {
+				g.emit(OpNOT, 0, "~Left")
+				if ((rVal + 1) & 0xFFFF) != 0 {
+					g.emit(OpADD, uint16((rVal+1)&0xFFFF), fmt.Sprintf("Q8.8 ~Left + %d", rVal+1))
+				}
+			}
+			return branchOp, trueOnBranch, true, nil
+		}
+		if lVal, ok := evalConstFixed8Expr(e.Left); ok {
+			if err := g.compileExprAsFixed8(e.Right); err != nil {
+				return 0, false, true, err
+			}
+			if !reverse {
+				g.emit(OpNOT, 0, "~Right")
+				if ((lVal + 1) & 0xFFFF) != 0 {
+					g.emit(OpADD, uint16((lVal+1)&0xFFFF), fmt.Sprintf("Q8.8 ~Right + %d", lVal+1))
+				}
+			} else {
+				if (lVal & 0xFFFF) != 0 {
+					g.emit(OpADD, uint16((-lVal)&0xFFFF), fmt.Sprintf("Q8.8 Vergleich Accu - %d", lVal))
+				}
+			}
+			return branchOp, trueOnBranch, true, nil
+		}
+		if err := g.compileExprAsFixed8(e.Right); err != nil {
+			return 0, false, true, err
+		}
+		tempRight := g.allocTemp()
+		g.emit(OpSTAM, tempRight, "Q8.8 Rechter Vergleichsoperand")
+		if err := g.compileExprAsFixed8(e.Left); err != nil {
+			return 0, false, true, err
+		}
+		if !reverse {
+			tempA := g.allocTemp()
+			g.emit(OpSTAM, tempA, "Sichere A")
+			g.emit(OpLDAM, tempRight, "Lade B")
+			g.emit(OpNOT, 0, "~B")
+			g.emit(OpADD, 1, "-B")
+			patchAddr := g.pc + 5
+			g.emit(OpSTAM, patchAddr, "Patch -B")
+			g.emit(OpLDAM, tempA, "Lade A")
+			g.emit(OpADD, 0, "Q8.8 A - B")
+		} else {
+			g.emit(OpNOT, 0, "~A")
+			g.emit(OpADD, 1, "-A")
+			patchAddr := g.pc + 5
+			g.emit(OpSTAM, patchAddr, "Patch -A")
+			g.emit(OpLDAM, tempRight, "Lade B")
+			g.emit(OpADD, 0, "Q8.8 B - A")
+		}
+		return branchOp, trueOnBranch, true, nil
+	}
+
 	// Fall 1: Rechter Operand ist eine Konstante (z.B. X > 64, ZX < 0, I = 15)
 	if rVal, ok := evalConstExpr(e.Right); ok {
 		if err := g.compileExpr(e.Left); err != nil {
@@ -740,17 +836,35 @@ func (g *CodeGenerator) emitComparisonDiff(e *ast.BinaryExpr) (branchOp uint16, 
 }
 
 func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
+	upper := strings.ToUpper(s.VarName)
+	if !g.explicitVarTypes[upper] && (strings.HasSuffix(upper, "#") || g.exprType(s.Start) == ast.TypeFixed8 || g.exprType(s.End) == ast.TypeFixed8 || (s.Step != nil && g.exprType(s.Step) == ast.TypeFixed8)) {
+		g.varTypes[upper] = ast.TypeFixed8
+	}
+	isFixedLoop := g.getVarType(s.VarName) == ast.TypeFixed8
 	varAddr := g.getOrCreateVar(s.VarName)
 
 	// 1. Initialisiere Startwert: Var = Start
-	if err := g.compileExpr(s.Start); err != nil {
-		return err
+	if isFixedLoop {
+		if err := g.compileExprAsFixed8(s.Start); err != nil {
+			return err
+		}
+	} else {
+		if err := g.compileExpr(s.Start); err != nil {
+			return err
+		}
 	}
 	g.emit(OpSTAM, varAddr, fmt.Sprintf("FOR %s Startwert", s.VarName))
 
-	// Ermittle Schrittweite (Standard: +1, unterstützt auch negative Konstanten wie STEP -1)
+	// Ermittle Schrittweite (Standard: +1 bzw. +1.0 bei FIXED8, unterstützt auch negative Konstanten)
 	stepVal := 1
-	if s.Step != nil {
+	if isFixedLoop {
+		stepVal = 256
+		if s.Step != nil {
+			if val, ok := evalConstFixed8Expr(s.Step); ok {
+				stepVal = val
+			}
+		}
+	} else if s.Step != nil {
 		if val, ok := evalConstExpr(s.Step); ok {
 			stepVal = val
 		} else if num, ok := s.Step.(*ast.NumberLiteral); ok {
@@ -759,7 +873,14 @@ func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
 	}
 
 	// Spezialfall: Konstanter Endwert (z.B. FOR I = 1 TO 31 oder FOR Y = 31 TO 0 STEP -1)
-	if endVal, ok := evalConstExpr(s.End); ok {
+	var endVal int
+	var endIsConst bool
+	if isFixedLoop {
+		endVal, endIsConst = evalConstFixed8Expr(s.End)
+	} else {
+		endVal, endIsConst = evalConstExpr(s.End)
+	}
+	if endIsConst {
 		loopStartPC := g.pc
 		loopStartLabel := fmt.Sprintf("__for_start_%s_%d", s.VarName, loopStartPC)
 		loopEndLabel := fmt.Sprintf("__for_end_%s_%d", s.VarName, loopStartPC)
@@ -806,8 +927,14 @@ func (g *CodeGenerator) compileFor(s *ast.ForStmt) error {
 
 	// Dynamischer Endwert: Eigene Symbol-Zelle statt flüchtigem allocTemp() verwenden,
 	// damit komplexe Ausdrücke im Schleifenrumpf niemals das Schleifenlimit überschreiben!
-	if err := g.compileExpr(s.End); err != nil {
-		return err
+	if isFixedLoop {
+		if err := g.compileExprAsFixed8(s.End); err != nil {
+			return err
+		}
+	} else {
+		if err := g.compileExpr(s.End); err != nil {
+			return err
+		}
 	}
 	endAddr := g.getOrCreateVar(fmt.Sprintf("__for_limit_%s", s.VarName))
 	g.emit(OpSTAM, endAddr, fmt.Sprintf("FOR %s Endwert", s.VarName))
@@ -983,6 +1110,9 @@ func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
 		g.fixups = append(g.fixups, labelFixup{patchPC: g.pc - 1, label: "__runtime_sqr"})
 		return nil
 
+	case *ast.FixedFuncExpr:
+		return g.compileFixedFunc(e)
+
 	default:
 		return fmt.Errorf("Unbekannter Ausdruckstyp: %T", expr)
 	}
@@ -990,6 +1120,14 @@ func (g *CodeGenerator) compileExpr(expr ast.Expr) error {
 
 func (g *CodeGenerator) compileBinary(e *ast.BinaryExpr) error {
 	op := strings.ToUpper(e.Op)
+
+	// Wenn einer der Operanden vom Typ FIXED8 (Q8.8) ist, nutze Q8.8 Festkomma-Arithmetik
+	if g.exprType(e.Left) == ast.TypeFixed8 || g.exprType(e.Right) == ast.TypeFixed8 {
+		switch op {
+		case "+", "-", "*", "/", "=", "==", "<>", "!=", "<", "<=", ">", ">=":
+			return g.compileBinaryFixed8(e)
+		}
+	}
 
 	rConstVal, rIsConst := evalConstExpr(e.Right)
 	lConstVal, lIsConst := evalConstExpr(e.Left)
@@ -1763,6 +1901,9 @@ func (g *CodeGenerator) emitRuntimeRoutines() {
 		g.emit(OpLDA, 0, "__sqr: Negativeingabe Rueckgabe 0")
 		g.emitSingle(OpRET, "RETURN __sqr (negativ)")
 	}
+
+	// 2c. Q8.8 Festkomma-Laufzeitroutinen (__runtime_fmul_q88, __runtime_fdiv_q88, __runtime_ftoi_q88)
+	g.emitFixedQ88Routines()
 
 	// 3. Display Löschen __cls (von __cls_ptr bis __cls_end_addr)
 	if g.needCls {

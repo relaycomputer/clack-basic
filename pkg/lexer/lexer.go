@@ -2,6 +2,7 @@ package lexer
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"unicode"
@@ -214,6 +215,9 @@ func (l *Lexer) readIdentifier() string {
 	for isLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_' {
 		l.readChar()
 	}
+	if l.ch == '#' {
+		l.readChar()
+	}
 	return string(l.source[startPos:l.pos])
 }
 
@@ -276,9 +280,35 @@ func (l *Lexer) readNumber() Token {
 		}
 	}
 
-	// Normale Dezimalzahl
+	// Normale Dezimalzahl oder Kommazahl (z.B. 1.5, 0.25, 3.75)
 	for unicode.IsDigit(l.ch) {
 		l.readChar()
+	}
+	if l.ch == '.' && unicode.IsDigit(l.peekChar()) {
+		l.readChar() // '.'
+		for unicode.IsDigit(l.ch) {
+			l.readChar()
+		}
+		numStr := string(l.source[startPos:l.pos])
+		fVal, err := strconv.ParseFloat(numStr, 64)
+		if err != nil {
+			return Token{Type: TOKEN_ILLEGAL, Lexeme: fmt.Sprintf("Ungültige Kommazahl: %s", numStr), Line: tokLine, Column: tokCol}
+		}
+		scaled := int(math.Round(fVal * 256.0))
+		if scaled > 32767 {
+			scaled = 32767
+		} else if scaled < -32768 {
+			scaled = -32768
+		}
+		return Token{
+			Type:     TOKEN_NUMBER,
+			Lexeme:   numStr,
+			Line:     tokLine,
+			Column:   tokCol,
+			Value:    scaled,
+			IsFloat:  true,
+			FloatVal: fVal,
+		}
 	}
 	numStr := string(l.source[startPos:l.pos])
 	val, err := strconv.Atoi(numStr)
@@ -334,6 +364,8 @@ var keywords = map[string]TokenType{
 	"LINE":      TOKEN_LINE,
 	"PIXELMOVE": TOKEN_PIXELMOVE,
 	"PRINT":     TOKEN_PRINT,
+	"DIM":       TOKEN_DIM,
+	"AS":        TOKEN_AS,
 	"END":       TOKEN_END,
 	"STOP":      TOKEN_END,
 	"HALT":      TOKEN_HALT,

@@ -652,3 +652,60 @@ END
 		}
 	})
 }
+func TestCodeGen_FixedQ88(t *testing.T) {
+	testCases := []struct {
+		name     string
+		source   string
+		expected uint16
+	}{
+		{
+			name:     "Q8.8 Constant Literal Assignment and FTOI",
+			source:   "10 DIM X AS FIXED8\n20 X = 2.5\n30 R = FTOI(X)\n40 END",
+			expected: 2,
+		},
+		{
+			name:     "Q8.8 Addition and FTOI",
+			source:   "10 DIM A, B, C AS FIXED8\n20 A = 1.5\n30 B = 2.25\n40 C = A + B\n50 R = FTOI(C)\n60 END",
+			expected: 3, // 1.5 + 2.25 = 3.75 -> int 3
+		},
+		{
+			name:     "Q8.8 Suffix Syntax Multiplication",
+			source:   "10 A# = 1.5\n20 B# = 2.0\n30 C# = A# * B#\n40 R = FTOI(C#)\n50 END",
+			expected: 3, // 1.5 * 2.0 = 3.0 -> int 3
+		},
+		{
+			name:     "Q8.8 Division",
+			source:   "10 A# = 7.5\n20 B# = 2.5\n30 C# = A# / B#\n40 R = FTOI(C#)\n50 END",
+			expected: 3, // 7.5 / 2.5 = 3.0 -> int 3
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.NewLexer(tc.source)
+			tokens := l.Tokenize()
+			p := parser.NewParser(tokens)
+			prog, err := p.ParseProgram()
+			if err != nil {
+				t.Fatalf("Parser error for '%s': %v", tc.source, err)
+			}
+			gen := NewCodeGenerator()
+			mem, _, err := gen.Generate(prog)
+			if err != nil {
+				t.Fatalf("Codegen error: %v", err)
+			}
+			finalAcc, finalMem, err := runRelayEmulator(mem, 50000)
+			if err != nil {
+				t.Fatalf("Emulator execution error: %v", err)
+			}
+			rAddr, ok := gen.symbols["R"]
+			if !ok {
+				t.Fatalf("Variable R not found in symbol table")
+			}
+			actual := finalMem[rAddr]
+			if actual != tc.expected {
+				t.Errorf("Test '%s': expected R=%d, got %d (final acc: %d)", tc.name, tc.expected, actual, finalAcc)
+			}
+		})
+	}
+}

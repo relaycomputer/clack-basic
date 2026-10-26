@@ -39,10 +39,20 @@ func (p *Program) Pos() int { return 1 }
 // AUSDRÜCKE (EXPRESSIONS)
 // ============================================================================
 
-// NumberLiteral: 16-Bit Zahlenkonstante (z.B. 100, 0x1400)
+// DataType repräsentiert den Datentyp einer Variable oder eines Ausdrucks.
+type DataType int
+
+const (
+	TypeInt16  DataType = iota // Standard 16-Bit Signed Integer
+	TypeFixed8                 // Q8.8 Signed Fixed-Point (8 Ganzzahl-, 8 Bruchbits)
+)
+
+// NumberLiteral: 16-Bit Zahlenkonstante (z.B. 100, 0x1400 oder Q8.8 Kommazahl 1.5)
 type NumberLiteral struct {
-	Value int
-	Line  int
+	Value    int
+	IsFixed  bool
+	FloatVal float64
+	Line     int
 }
 
 func (n *NumberLiteral) Pos() int       { return n.Line }
@@ -115,8 +125,18 @@ type SqrExpr struct {
 	Line     int
 }
 
-func (s *SqrExpr) Pos() int    { return s.Line }
-func (s *SqrExpr) exprNode()   {}
+func (s *SqrExpr) Pos() int  { return s.Line }
+func (s *SqrExpr) exprNode() {}
+
+// FixedFuncExpr: Festkomma-/Konvertierungsfunktionen -> FMUL(A, B), FDIV(A, B), FADD(A, B), FSUB(A, B), ITOF(A), FTOI(A), FIXED8(A), INT(A), ABS(A), FABS(A), FNEG(A)
+type FixedFuncExpr struct {
+	Name string
+	Args []Expr
+	Line int
+}
+
+func (f *FixedFuncExpr) Pos() int  { return f.Line }
+func (f *FixedFuncExpr) exprNode() {}
 
 // ============================================================================
 // ANWEISUNGEN (STATEMENTS)
@@ -310,3 +330,14 @@ type EndStmt struct {
 
 func (e *EndStmt) Pos() int  { return e.Line }
 func (e *EndStmt) stmtNode() {}
+
+// DimStmt: Typdeklaration -> DIM X AS FIXED8 (oder DIM X, Y AS FIXED8)
+type DimStmt struct {
+	VarNames []string
+	VarType  DataType
+	TypeName string
+	Line     int
+}
+
+func (d *DimStmt) Pos() int  { return d.Line }
+func (d *DimStmt) stmtNode() {}

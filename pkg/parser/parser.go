@@ -13,6 +13,7 @@ package parser
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"clack-basic/pkg/ast"
 	"clack-basic/pkg/lexer"
@@ -123,7 +124,7 @@ func (p *Parser) ParseProgram() (*ast.Program, error) {
 
 func (p *Parser) parseStatement() ast.Stmt {
 	// 1. Zeilennummer als Label (z.B. "10 GOTO 20")
-	if p.curTok.Type == lexer.TOKEN_NUMBER {
+	if p.curTok.Type == lexer.TOKEN_NUMBER && !p.curTok.IsFloat {
 		lineNum := strconv.Itoa(p.curTok.Value)
 		tok := p.curTok
 		p.nextToken()
@@ -187,6 +188,8 @@ func (p *Parser) parseStatement() ast.Stmt {
 		return p.parsePixelMoveStatement()
 	case lexer.TOKEN_PRINT:
 		return p.parsePrintStatement()
+	case lexer.TOKEN_DIM:
+		return p.parseDimStatement()
 	case lexer.TOKEN_END, lexer.TOKEN_HALT:
 		line := p.curTok.Line
 		p.nextToken()
@@ -694,6 +697,63 @@ func (p *Parser) parsePrintStatement() ast.Stmt {
 	return &ast.PrintStmt{Items: items, Line: line}
 }
 
+func (p *Parser) parseDimStatement() ast.Stmt {
+	line := p.curTok.Line
+	p.nextToken() // DIM überspringen
+
+	var varNames []string
+	for {
+		if p.curTok.Type != lexer.TOKEN_IDENT {
+			p.addError(fmt.Sprintf("Variablenname nach DIM erwartet, erhalten: %s", p.curTok.Lexeme))
+			return nil
+		}
+		varNames = append(varNames, p.curTok.Lexeme)
+		p.nextToken()
+
+		if p.curTok.Type == lexer.TOKEN_COMMA {
+			p.nextToken()
+		} else {
+			break
+		}
+	}
+
+	varType := ast.TypeInt16
+	typeName := "INT16"
+
+	if p.curTok.Type == lexer.TOKEN_AS {
+		p.nextToken() // AS überspringen
+		if p.curTok.Type != lexer.TOKEN_IDENT {
+			p.addError(fmt.Sprintf("Typname nach AS erwartet, erhalten: %s", p.curTok.Lexeme))
+			return nil
+		}
+		typeName = strings.ToUpper(p.curTok.Lexeme)
+		p.nextToken()
+
+		// Optional: Q8.8 (wird als IDENT "Q8" gefolgt von ".8" oder "_8" geschrieben)
+		if typeName == "Q8" && p.curTok.Type == lexer.TOKEN_NUMBER {
+			p.nextToken()
+			typeName = "Q8.8"
+		}
+
+		switch typeName {
+		case "FIXED8", "FIXED", "Q8.8", "Q88":
+			varType = ast.TypeFixed8
+		case "INTEGER", "INTEGER16", "INT16", "INT":
+			varType = ast.TypeInt16
+		default:
+			p.addError(fmt.Sprintf("Unbekannter Datentyp in DIM: %s", typeName))
+			return nil
+		}
+	}
+
+	return &ast.DimStmt{
+		VarNames: varNames,
+		VarType:  varType,
+		TypeName: typeName,
+		Line:     line,
+	}
+}
+
 // ============================================================================
 // AUSDRÜCKE (EXPRESSIONS) PARSEN — PRATT PARSER
 // ============================================================================
@@ -717,9 +777,14 @@ func (p *Parser) parsePrefix() ast.Expr {
 
 	switch p.curTok.Type {
 	case lexer.TOKEN_NUMBER:
-		val := p.curTok.Value
+		tok := p.curTok
 		p.nextToken()
-		return &ast.NumberLiteral{Value: val, Line: line}
+		return &ast.NumberLiteral{
+			Value:    tok.Value,
+			IsFixed:  tok.IsFloat,
+			FloatVal: tok.FloatVal,
+			Line:     line,
+		}
 
 	case lexer.TOKEN_STRING:
 		val := p.curTok.Lexeme
@@ -728,6 +793,29 @@ func (p *Parser) parsePrefix() ast.Expr {
 
 	case lexer.TOKEN_IDENT:
 		name := p.curTok.Lexeme
+		upper := strings.ToUpper(name)
+		if p.peekTok.Type == lexer.TOKEN_LPAREN && isFixedBuiltinFunc(upper) {
+			p.nextToken() // Funktionsname
+			p.nextToken() // '('
+			var args []ast.Expr
+			for p.curTok.Type != lexer.TOKEN_RPAREN && p.curTok.Type != lexer.TOKEN_EOF {
+				arg := p.parseExpression(PREC_LOWEST)
+				if arg != nil {
+					args = append(args, arg)
+				}
+				if p.curTok.Type == lexer.TOKEN_COMMA {
+					p.nextToken()
+				} else {
+					break
+				}
+			}
+			if p.curTok.Type == lexer.TOKEN_RPAREN {
+				p.nextToken()
+			} else {
+				p.addError(fmt.Sprintf("Schließende Klammer ')' nach %s(...) erwartet", upper))
+			}
+			return &ast.FixedFuncExpr{Name: upper, Args: args, Line: line}
+		}
 		p.nextToken()
 		return &ast.VariableExpr{Name: name, Line: line}
 
@@ -817,4 +905,13 @@ func (p *Parser) curPrecedence() int {
 		return prec
 	}
 	return PREC_LOWEST
+}
+
+func isFixedBuiltinFunc(name string) bool {
+	switch name {
+	case "FADD", "FSUB", "FMUL", "FDIV", "ITOF", "FTOI", "FIXED8", "INT", "FIX", "ABS", "FABS", "FNEG":
+		return true
+	default:
+		return false
+	}
 }
