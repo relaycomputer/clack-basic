@@ -113,3 +113,19 @@ Unter den [Releases auf Forgejo](https://git.latentforge.dev/relay-computing/cla
 - 🪟 **Windows (x64):** `clack-windows-amd64.exe`
 - 🍏 **macOS Apple Silicon (ARM64):** `clack-darwin-arm64`
 - 🍏 **macOS Intel (x64):** `clack-darwin-amd64`
+
+---
+
+## 👥 Engineering Team & Contacts
+
+| Domain | Lead Engineer | Contact |
+| :--- | :--- | :--- |
+| **Hardware Architecture & Discrete Relays** | **Peter Prikasky** ([relaiscomputer.at](https://relaiscomputer.at)) | `hardware@relaycomputer.org` |
+| **Software, Compiler & Simulation** | **Christian Buchhas** ([relaycomputer.org](https://relaycomputer.org)) | `software@relaycomputer.org` |
+| **General Inquiries & Community** | **The Relay Computer Project** | `contact@relaycomputer.org` |
+
+---
+
+## 📜 License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.
